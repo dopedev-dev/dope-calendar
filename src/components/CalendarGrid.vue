@@ -53,18 +53,19 @@
             </div>
           </div>
           <div class="content">
-             <div
-              v-for="(item, index) in processedItems"
-              :key="item.id"
-              class="calendar-item-wrapper"
-              :class="{
-                'selected': selectedItemIndex === index,
-                'dragging': draggingItem?.originalIndex === index
-              }"
-              :style="item.style"
-              @click="handleItemClick($event, index)"
-              @mousedown="handleDragStart($event, item, index)"
-            >
+<div
+  v-for="(item, index) in processedItems"
+  :key="item.id"
+  class="calendar-item-wrapper"
+  :class="{ 
+    selected: selectedItemIndex === index, 
+    dragging: draggingItem?.originalIndex === index,
+    'transition-to-final': overriddenItemIndex !== index
+  }"
+  :style="item.style"
+  @mousedown="handleDragStart($event, item, index)"
+  @click="handleItemClick($event, index)"
+>
               <div class="default-item">
                 <div class="resize-handle-top" @mousedown.stop="handleResizeStart($event, item, 'top')"></div>
                 
@@ -498,7 +499,7 @@ export default defineComponent({
 
     let animationFrameId: number | null = null
 
-    const handleZoomStart = (event: MouseEvent | TouchEvent) => {
+const handleZoomStart = (event: MouseEvent | TouchEvent) => {
       if (!props.zoom) return
       isZooming.value = true
       startY = 'touches' in event ? event.touches[0].clientY : event.clientY
@@ -508,6 +509,10 @@ export default defineComponent({
       const clickY = 'touches' in event ? event.touches[0].clientY : event.clientY
       const middleY = rect.top + rect.height / 2
       dragFromUpperHalf.value = clickY < middleY
+
+      // Disable transitions on all items during zoom
+      const allItems = document.querySelectorAll('.calendar-item-wrapper')
+      allItems.forEach(el => el.classList.add('no-transition'))
 
       document.addEventListener('mousemove', handleZoomMove)
       document.addEventListener('touchmove', handleZoomMove, { passive: false })
@@ -548,6 +553,10 @@ export default defineComponent({
         cancelAnimationFrame(animationFrameId)
         animationFrameId = null
       }
+
+      // Re-enable transitions on all items after zoom
+      const allItems = document.querySelectorAll('.calendar-item-wrapper')
+      allItems.forEach(el => el.classList.remove('no-transition'))
 
       document.removeEventListener('mousemove', handleZoomMove)
       document.removeEventListener('touchmove', handleZoomMove)
@@ -604,62 +613,72 @@ export default defineComponent({
       }
     })
 
- const processedItems = computed(() => {
-      const dayWidth = 100 / monthDays.value.length
-      const totalHours = props.endHour - props.startHour
+const processedItems = computed(() => {
+  const dayWidth = 100 / monthDays.value.length
+  const totalHours = props.endHour - props.startHour
 
-      // The total height of the scrollable content area for items.
-      const contentHeight =
-        dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
+  // The total height of the scrollable content area for items.
+  const contentHeight =
+    dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
 
-      return props.modelValue
-        .map((item, index) => {
-          const startDt = DateTime.fromJSDate(item.start)
-          const endDt = DateTime.fromJSDate(item.end)
+  return props.modelValue
+    .map((item, index) => {
+      const startDt = DateTime.fromJSDate(item.start)
+      const endDt = DateTime.fromJSDate(item.end)
 
-          const dayIndex = monthDays.value.findIndex((day) => {
-            const dayDt = props.jalaali
-              ? DateTime.fromObject(
-                  { day: day.day, month: startDt.month, year: startDt.year },
-                  { zone: 'local', numberingSystem: 'latn', outputCalendar: 'persian' }
-                )
-              : DateTime.fromObject({
-                  day: day.day,
-                  month: startDt.month,
-                  year: startDt.year
-                })
+      const dayIndex = monthDays.value.findIndex((day) => {
+        const dayDt = props.jalaali
+          ? DateTime.fromObject(
+              { day: day.day, month: startDt.month, year: startDt.year },
+              { zone: 'local', numberingSystem: 'latn', outputCalendar: 'persian' }
+            )
+          : DateTime.fromObject({
+              day: day.day,
+              month: startDt.month,
+              year: startDt.year
+            })
 
-            return dayDt.hasSame(startDt, 'day')
-          })
+        return dayDt.hasSame(startDt, 'day')
+      })
 
-          if (dayIndex === -1) {
-            return null // Item is not in the visible range
+      if (dayIndex === -1) {
+        return null // Item is not in the visible range
+      }
+
+      const startOfDay = startDt.startOf('day').plus({ hours: props.startHour })
+      const itemStartOffset = startDt.diff(startOfDay, 'minutes').minutes
+      const itemDuration = endDt.diff(startDt, 'minutes').minutes
+
+      const topOffset = (itemStartOffset / (totalHours * 60)) * contentHeight
+      const height = (itemDuration / (totalHours * 60)) * contentHeight
+      const left = dayIndex * dayWidth
+      const width = dayWidth
+
+      // Use overridden style if this item is being transitioned
+      const style = overriddenItemIndex.value === index && overriddenItemStyle.value
+        ? {
+            top: overriddenItemStyle.value.top,
+            left: overriddenItemStyle.value.left,
+            height: `${height}px`,
+            width: `${width}%`,
+            position: 'absolute'
+          }
+        : {
+            top: `calc(${topPadding.value}px + ${topOffset}px)`,
+            left: `${left}%`,
+            height: `${height}px`,
+            width: `${width}%`,
+            position: 'absolute'
           }
 
-          const startOfDay = startDt.startOf('day').plus({ hours: props.startHour })
-          const itemStartOffset = startDt.diff(startOfDay, 'minutes').minutes
-          const itemDuration = endDt.diff(startDt, 'minutes').minutes
-
-          const topOffset = (itemStartOffset / (totalHours * 60)) * contentHeight
-          const height = (itemDuration / (totalHours * 60)) * contentHeight
-          const left = dayIndex * dayWidth
-          const width = dayWidth
-
-          return {
-            ...item,
-            id: `item-${index}`,
-            style: {
-              top: `calc(${topPadding.value}px + ${topOffset}px)`,
-              left: `${left}%`,
-              height: `${height}px`,
-              width: `${width}%`,
-              position: 'absolute'
-            }
-          }
-        })
-        .filter((item) => item !== null)
+      return {
+        ...item,
+        id: `item-${index}`,
+        style
+      }
     })
-
+    .filter((item) => item !== null)
+})
    const processedHolidays = computed(() => {
   return new Set(
     props.holidays.map(d => {
@@ -690,7 +709,7 @@ const isCurrentDay = (date: Date) => {
 
 
 
-  const handleResizeStart = (event: MouseEvent, item: any, handle: 'top' | 'bottom') => {
+const handleResizeStart = (event: MouseEvent, item: any, handle: 'top' | 'bottom') => {
       if (!props.editable) return
 
       const originalIndex = props.modelValue.findIndex(
@@ -703,6 +722,10 @@ const isCurrentDay = (date: Date) => {
       initialY.value = event.clientY
       initialStart.value = new Date(item.start)
       initialEnd.value = new Date(item.end)
+      
+      // Disable transitions on all items during resize
+      const allItems = document.querySelectorAll('.calendar-item-wrapper')
+      allItems.forEach(el => el.classList.add('no-transition'))
       
       document.addEventListener('mousemove', handleResizing)
       document.addEventListener('mouseup', handleResizeEnd)
@@ -750,6 +773,11 @@ const isCurrentDay = (date: Date) => {
       resizingItem.value = null
       initialStart.value = null
       initialEnd.value = null
+      
+      // Re-enable transitions on all items after resize
+      const allItems = document.querySelectorAll('.calendar-item-wrapper')
+      allItems.forEach(el => el.classList.remove('no-transition'))
+      
       document.removeEventListener('mousemove', handleResizing)
       document.removeEventListener('mouseup', handleResizeEnd)
   }
@@ -762,6 +790,11 @@ const dragStartX = ref(0)
 const dragStartY = ref(0)
 const dragGhost = ref<HTMLElement | null>(null)
 const selectedIndex = ref(-1)
+
+const overriddenItemIndex = ref<number | null>(null)
+const overriddenItemStyle = ref<{ top: string; left: string } | null>(null)
+
+
 
 const handleDragMove = (event: MouseEvent) => {
   if (!draggingItem.value || !dragGhost.value || !calendarContent.value) return
@@ -817,6 +850,8 @@ const handleDragStart = (event: MouseEvent, item: any, index: number) => {
   document.addEventListener('mouseup', handleDragEnd)
 }
 
+
+
 const handleDragEnd = (event: MouseEvent) => {
   if (!draggingItem.value || !calendarContent.value) return
 
@@ -826,9 +861,13 @@ const handleDragEnd = (event: MouseEvent) => {
   }
 
   const calendarRect = calendarContent.value.getBoundingClientRect()
+  const dropX = event.clientX - calendarRect.left + calendarContent.value.scrollLeft
   const dropY = event.clientY - calendarRect.top + calendarContent.value.scrollTop
 
-  let targetDayIndex = selectedIndex.value
+  const calendarWidth = calendarContent.value.scrollWidth
+  const dayWidth = calendarWidth / monthDays.value.length
+
+  let targetDayIndex = Math.floor(dropX / dayWidth)
   targetDayIndex = Math.max(0, Math.min(targetDayIndex, monthDays.value.length - 1))
 
   const targetDayData = monthDays.value[targetDayIndex]
@@ -840,38 +879,45 @@ const handleDragEnd = (event: MouseEvent) => {
   const originalItem = draggingItem.value.item
   const itemDuration = originalItem.end.getTime() - originalItem.start.getTime()
 
-  // Calculate hour offset using the same method as processedItems
   const totalHours = props.endHour - props.startHour
-  const contentHeight = dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
-  const pixelsPerHour = contentHeight / totalHours
+  const contentHeight =
+    dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
+  
   const adjustedDropY = dropY - topPadding.value
-  const hourOffset = Math.max(0, adjustedDropY / pixelsPerHour)
-
-  // Create new start date respecting the calendar system
+  
+  const pixelsPerMinute = contentHeight / (totalHours * 60)
+  const offsetMinutes = adjustedDropY / pixelsPerMinute
+  
+  const clampedMinutes = Math.max(0, Math.min(offsetMinutes, totalHours * 60))
+  
+  const itemDurationMinutes = itemDuration / 60000
+  const halfDurationMinutes = itemDurationMinutes / 2
+  const adjustedMinutes = clampedMinutes - halfDurationMinutes
+  const adjustedHourOffset = Math.floor(adjustedMinutes / 60)
+  const adjustedMinuteOffset = Math.round(adjustedMinutes % 60)
+  
   let newStartDt: DateTime
   
   if (props.jalaali) {
-    // For Jalaali calendar, create date in Persian calendar system
     newStartDt = DateTime.fromObject(
       {
         day: targetDayData.day,
         month: targetDayData.month,
         year: targetDayData.year,
-        hour: props.startHour + Math.floor(hourOffset),
-        minute: Math.round((hourOffset % 1) * 60),
+        hour: props.startHour + adjustedHourOffset,
+        minute: adjustedMinuteOffset,
         second: 0,
         millisecond: 0
       },
       { zone: 'local', numberingSystem: 'latn', outputCalendar: 'persian' }
     )
   } else {
-    // For Georgian calendar
     newStartDt = DateTime.fromObject({
       day: targetDayData.day,
       month: targetDayData.month,
       year: targetDayData.year,
-      hour: props.startHour + Math.floor(hourOffset),
-      minute: Math.round((hourOffset % 1) * 60),
+      hour: props.startHour + adjustedHourOffset,
+      minute: adjustedMinuteOffset,
       second: 0,
       millisecond: 0
     })
@@ -880,27 +926,63 @@ const handleDragEnd = (event: MouseEvent) => {
   const newStart = newStartDt.toJSDate()
   const newEnd = new Date(newStart.getTime() + itemDuration)
 
-  const updatedItems = props.modelValue.map((item, idx) => {
-    if (idx === draggingItem.value!.originalIndex) {
-      return {
-        ...item,
-        start: newStart,
-        end: newEnd
-      }
-    }
-    return item
-  })
-
-  emit('update:modelValue', updatedItems)
+  const releasedTop = `${topPadding.value + adjustedDropY}px`
+  const releasedLeft = `${targetDayIndex * (100 / monthDays.value.length)}%`
+  
+  const originalIndex = draggingItem.value.originalIndex
+  
+  // Phase 1: Set override to released position (no transition)
+  overriddenItemIndex.value = originalIndex
+  overriddenItemStyle.value = {
+    top: releasedTop,
+    left: releasedLeft
+  }
 
   if (draggedElement.value) {
+    draggedElement.value.classList.add('no-transition')
     draggedElement.value.classList.remove('dragging')
   }
+
+  // Phase 2: Enable transition BEFORE updating model
+  setTimeout(() => {
+    if (draggedElement.value) {
+      draggedElement.value.classList.remove('no-transition')
+      draggedElement.value.classList.add('transition-to-final')
+    }
+    
+    // Phase 3: Clear override to trigger transition to final position
+    setTimeout(() => {
+      overriddenItemIndex.value = null
+      overriddenItemStyle.value = null
+      
+      // Phase 4: NOW update the model after override is cleared
+      const updatedItems = props.modelValue.map((item, idx) => {
+        if (idx === originalIndex) {
+          return {
+            ...item,
+            start: newStart,
+            end: newEnd
+          }
+        }
+        return item
+      })
+
+      emit('update:modelValue', updatedItems)
+    }, 10)
+  }, 0)
+
+  // Remove transition class after animation completes
+  setTimeout(() => {
+    if (draggedElement.value) {
+      draggedElement.value.classList.remove('transition-to-final')
+    }
+  }, 300)
 
   resetDrag()
 }
 
-const resetDrag = () => {
+
+ const resetDrag = () => {
   draggingItem.value = null
   draggedElement.value = null
   dragStartX.value = 0
@@ -927,34 +1009,33 @@ const handleCalendarClick = (event: MouseEvent) => {
 }
 
   return {
-    isCurrentDay,
-    isHoliday,
-    calendarBodyWidth,
-    weekendDay,
-    calendarContent,
-    calendarHeader,
-    contentContainer,
-    monthDays,
-    getDayTitle,
-    handleContentScroll,
-    calendar,
-
-
-    isWeekend,
-    dayHoursList,
-    calendarBodyHeight,
-    handleZoomStart,
-    handleHeaderScroll,
-    processedItems,
-      // resizing : 
-    handleResizeEnd,
-    handleResizeStart,
-    handleDragStart,
-    handleItemClick,
-    draggingItem,
-    selectedItemIndex,
-    handleCalendarClick,
-    }
+  isCurrentDay,
+  isHoliday,
+  calendarBodyWidth,
+  weekendDay,
+  calendarContent,
+  calendarHeader,
+  contentContainer,
+  monthDays,
+  getDayTitle,
+  handleContentScroll,
+  calendar,
+  isWeekend,
+  dayHoursList,
+  calendarBodyHeight,
+  handleZoomStart,
+  handleHeaderScroll,
+  processedItems,
+  handleResizeEnd,
+  handleResizeStart,
+  handleDragStart,
+  handleItemClick,
+  draggingItem,
+  selectedItemIndex,
+  handleCalendarClick,
+  overriddenItemIndex,
+  overriddenItemStyle,
+}
   },
 })
 </script>
@@ -1168,6 +1249,7 @@ const handleCalendarClick = (event: MouseEvent) => {
   cursor: grabbing;
 }
 
+
 .calendar-item-wrapper {
   position: absolute;
   width: 100%;
@@ -1182,6 +1264,16 @@ const handleCalendarClick = (event: MouseEvent) => {
   box-shadow: 0 0 0 3px rgba(54, 162, 235, 0.5), 0 4px 12px rgba(0, 0, 0, 0.15);
   outline: 2px solid rgba(54, 162, 235, 0.8);
   outline-offset: 2px;
+}
+
+.calendar-item-wrapper.no-transition {
+  /* Disable all transitions when snapping to released position */
+  transition: none !important;
+}
+
+.calendar-item-wrapper.transition-to-final {
+  /* Only transition when moving from released position to final position */
+  transition: top 0.3s ease-out, left 0.3s ease-out;
 }
 
 .calendar-item-wrapper.dragging {

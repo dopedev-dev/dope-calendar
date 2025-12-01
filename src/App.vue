@@ -1,7 +1,5 @@
 <template>
   <div class="h-dvh w-dvw">
-    <div class=" cursor-pointer" @click="goToNextDay">Next day</div>
-    <div class=" cursor-pointer" @click="goToPrevDay">Prev Day/</div>
     <CalendarGrid
       :georgian="false"
       :jalaali="true"
