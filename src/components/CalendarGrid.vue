@@ -53,14 +53,18 @@
             </div>
           </div>
           <div class="content">
-            <div v-for="item in processedItems" :key="item.id" :style="item.style">
+           <div v-for="item in processedItems" :key="item.id" :style="item.style" class="calendar-item-wrapper">
+              <div
+                class="resize-handle top"
+                @mousedown.stop="(event) => handleResizeStart(event, item, 'top')"
+              ></div>
+              <!-- content goes here : -->
               <slot name="item" :item="item">
-                <!-- Default item appearance -->
-                <div class="default-item">
-                  <strong>{{ item.title }}</strong>
-                  <p>{{ item.start.toLocaleTimeString() }} - {{ item.end.toLocaleTimeString() }}</p>
-                </div>
               </slot>
+              <div
+                class="resize-handle bottom"
+                @mousedown.stop="(event) => handleResizeStart(event, item, 'bottom')"
+              ></div>
             </div>
           </div>        
         </div>
@@ -178,8 +182,9 @@ export default defineComponent({
       type : Array as PropType<Date[]>,
       default : ()=> [],
     }
-  },
-  setup(props) {
+  }, 
+  emits:['update:modelValue'],
+  setup(props,{emit}) {
     const calendar = ref<HTMLElement | null>(null)
     const calendarContent = ref<HTMLElement | null>(null)
     const calendarHeader = ref<HTMLElement | null>(null)
@@ -673,6 +678,63 @@ const isCurrentDay = (date: Date) => {
   )
 }
 
+  const resizingItem = ref<{ item: any; handle: 'top' | 'bottom' } | null>(null)
+    const initialY = ref(0)
+    const initialStart = ref<Date | null>(null)
+    const initialEnd = ref<Date | null>(null)
+
+    const handleResizeStart = (event: MouseEvent, item: any, handle: 'top' | 'bottom') => {
+      resizingItem.value = { item, handle }
+      initialY.value = event.clientY
+      initialStart.value = new Date(item.start)
+      initialEnd.value = new Date(item.end)
+
+      document.addEventListener('mousemove', handleResizing)
+      document.addEventListener('mouseup', handleResizeEnd)
+    }
+
+
+
+
+   const handleResizing = (event: MouseEvent) => {
+      if (!resizingItem.value || !calendarContent.value) return
+
+      const deltaY = event.clientY - initialY.value
+      const calendarHeight = calendarContent.value.scrollHeight
+      const totalMinutes = (props.endHour - props.startHour) * 60
+      const minutesPerPixel = totalMinutes / calendarHeight
+
+      const deltaMinutes = deltaY * minutesPerPixel
+
+      const { item, handle } = resizingItem.value
+      const newItems = props.modelValue.map((i) => (i === item.originalItem ? { ...i } : i))
+      const itemToUpdate = newItems.find((i) => i === item.originalItem)
+
+      if (!itemToUpdate || !initialStart.value || !initialEnd.value) return
+
+      if (handle === 'top') {
+        const newStart = new Date(initialStart.value.getTime() + deltaMinutes * 60000)
+        // Ensure start time does not go past end time (with a 5-minute buffer)
+        if (newStart.getTime() < initialEnd.value.getTime() - 5 * 60000) {
+          itemToUpdate.start = newStart
+        }
+      } else {
+        // handle === 'bottom'
+        const newEnd = new Date(initialEnd.value.getTime() + deltaMinutes * 60000)
+        // Ensure end time does not go before start time (with a 5-minute buffer)
+        if (newEnd.getTime() > initialStart.value.getTime() + 5 * 60000) {
+          itemToUpdate.end = newEnd
+        }
+      }
+      emit('update:modelValue', newItems)
+    }
+
+    const handleResizeEnd = () => {
+      resizingItem.value = null
+      document.removeEventListener('mousemove', handleResizing)
+      document.removeEventListener('mouseup', handleResizeEnd)
+    }
+
     return {
       isCurrentDay,
      isHoliday,
@@ -685,12 +747,17 @@ const isCurrentDay = (date: Date) => {
       getDayTitle,
       handleContentScroll,
       calendar,
+
+
       isWeekend,
       dayHoursList,
       calendarBodyHeight,
       handleZoomStart,
       handleHeaderScroll,
       processedItems,
+      // resizing : 
+      handleResizeEnd,
+      handleResizeStart,
     }
   },
 })
@@ -905,4 +972,28 @@ const isCurrentDay = (date: Date) => {
   cursor: grabbing;
 }
 
+.calendar-item-wrapper {
+  position: absolute;
+  width: 100%;
+  z-index: 1;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.resize-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 8px; 
+  cursor: ns-resize;
+  z-index: 2;
+}
+
+.resize-handle.top {
+  top: -4px; 
+}
+
+.resize-handle.bottom {
+  bottom: -4px; 
+}
 </style>
