@@ -16,14 +16,13 @@
              {{ item.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }} -
             {{ item.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
           </div>
-        // also another comment
         </div>
       </template>
     </CalendarGrid>
   </div>
 </template>
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import CalendarGrid from './components/CalendarGrid.vue'
 const today = new Date()
 const calendarItems = ref(
@@ -104,6 +103,10 @@ const calendarItems = ref(
 const holidays = ref([
   new Date(new Date().setDate(today.getDate() + 5)) // Example holiday 5 days from now
 ])
+
+onMounted(()=>{
+  console.log(holidays.value)
+})
 </script>
 <style scoped>
 .custom-calendar-item{

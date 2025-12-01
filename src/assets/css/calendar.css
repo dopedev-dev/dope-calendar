@@ -25,6 +25,7 @@
 
   /* Weekend */
   --dc-weekend-day-color: rgba(248, 113, 113, 0.5); /* red-400 with 50% opacity */
+  --dc-current-day-color: rgba(0, 36, 199, 1); /* red with 50% opacity */
 }
 
 /* Dark theme styles */

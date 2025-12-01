@@ -3,21 +3,26 @@
     <div class="header-container">
       <div class="header-padding"></div>
       <div ref="calendarHeader" @scroll="handleHeaderScroll" class="calendar-header hide-scrollbar">
-        <div v-for="(day, index) in monthDays" :key="index" 
-          :class="{ 'weekend-day': isWeekend(day.weekDay) || isHoliday(day.date) , 'day-cell' : true }" :style="{width: `${100/ monthDays.length}%`}">
+         <div v-for="(day, index) in monthDays" :key="index" 
+           :class="{
+          'day-cell': true,
+          'weekend-day': isWeekend(day.weekDay) || isHoliday(day.date),
+          'current-day': isCurrentDay(day.date)
+        }"
+        :style="{width: `${100/ monthDays.length}%`}">
           <div class="day-number" :style="{
-            color: isWeekend(day.weekDay)
+            color: isHoliday(day.date)|| isWeekend(day.weekDay)
               ? 'var(--dc-weekend-day-color)'
-              : 'var(--dc-day-number-color)',
+              : (isCurrentDay(day.date) ?'var(--dc-current-day-color)' :'var(--dc-day-number-color)'),
             fontSize: 'var(--dc-day-number-font-size)',
             fontWeight: 'var(--dc-day-number-font-weight)'
           }">
             {{ day.day }}
           </div>
           <div class="day-name" :style="{
-            color: isWeekend(day.weekDay)
+            color: isWeekend(day.weekDay) || isHoliday(day.date)
               ? 'var(--dc-weekend-day-color)'
-              : 'var(--dc-day-name-color)',
+              : (isCurrentDay(day.date)?'var(--dc-current-day-color)' :'var(--dc-day-name-color)'),
             fontSize: 'var(--dc-day-name-font-size)',
             fontWeight: 'var(--dc-day-name-font-weight)'
           }">
@@ -645,15 +650,31 @@ export default defineComponent({
         .filter((item) => item !== null)
     })
 
-     const processedHolidays = computed(() => {
-      return new Set(props.holidays.map(d => new Date(d).setHours(0, 0, 0, 0)))
+   const processedHolidays = computed(() => {
+  return new Set(
+    props.holidays.map(d => {
+      const date = new Date(d)
+      return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
     })
+  )
+})
 
-    const isHoliday = (date: Date) => {
-      return processedHolidays.value.has(new Date(date).setHours(0, 0, 0, 0))
-    }
+const isHoliday = (date: Date) => {
+  return processedHolidays.value.has(
+    `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+  )
+}
+const isCurrentDay = (date: Date) => {
+  const today = new Date()
+  return (
+    date.getDate() === today.getDate() &&
+    date.getMonth() === today.getMonth() &&
+    date.getFullYear() === today.getFullYear()
+  )
+}
 
     return {
+      isCurrentDay,
      isHoliday,
       calendarBodyWidth,
       weekendDay,
@@ -746,6 +767,10 @@ export default defineComponent({
 .weekend-day .day-number,
 .weekend-day .day-name {
   color: var(--dc-weekend-day-color);
+}
+
+.current-day{
+  color:var(-dc-current-day-color)
 }
 
 
@@ -879,4 +904,5 @@ export default defineComponent({
 .cursor-grabbing {
   cursor: grabbing;
 }
+
 </style>
