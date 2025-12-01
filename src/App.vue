@@ -1,11 +1,12 @@
 <template>
   <div class="h-dvh w-dvw">
     <CalendarGrid
-      :georgian="true"
-      :jalaali="false"
+      :georgian="false"
+      :jalaali="true"
       mode="month"
       dir="ltr"
       lang="en"
+      :holidays="holidays"
       v-model="calendarItems"
     >
       <template #item="{ item }">
@@ -15,6 +16,7 @@
              {{ item.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }} -
             {{ item.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
           </div>
+        // also another comment
         </div>
       </template>
     </CalendarGrid>
@@ -23,11 +25,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import CalendarGrid from './components/CalendarGrid.vue'
-
 const today = new Date()
-
-const calendarItems = ref([
-  // Item for today
+const calendarItems = ref(
+[
   {
     title: 'Team Sync',
     start: new Date(new Date(today).setHours(10, 0, 0, 0)),
@@ -35,7 +35,6 @@ const calendarItems = ref([
     color: 'rgba(54, 162, 235, 0.7)', // Blue
     description: 'Weekly team synchronization meeting.'
   },
-  // Another item for today
   {
     title: 'Lunch Break',
     start: new Date(new Date(today).setHours(13, 0, 0, 0)),
@@ -91,6 +90,7 @@ const calendarItems = ref([
     color: 'rgba(75, 192, 192, 0.7)', // Green
     description: 'Discuss marketing strategies.'
   },
+
   // Item for four days from now
   {
     title: 'Design Review',
@@ -98,10 +98,13 @@ const calendarItems = ref([
     end: new Date(new Date(new Date().setDate(today.getDate() + 4)).setHours(11, 0, 0, 0)),
     color: 'rgba(153, 102, 255, 0.7)', // Purple
     description: 'Review new UI/UX designs.'
-  }
+  }  
+]
+)
+const holidays = ref([
+  new Date(new Date().setDate(today.getDate() + 5)) // Example holiday 5 days from now
 ])
 </script>
-
 <style scoped>
 .custom-calendar-item{
   width: 100%;

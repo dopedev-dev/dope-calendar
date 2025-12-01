@@ -4,7 +4,7 @@
       <div class="header-padding"></div>
       <div ref="calendarHeader" @scroll="handleHeaderScroll" class="calendar-header hide-scrollbar">
         <div v-for="(day, index) in monthDays" :key="index" 
-          :class="{ 'weekend-day': isWeekend(day.weekDay) , 'day-cell' : true }" :style="{width: `${100/ monthDays.length}%`}">
+          :class="{ 'weekend-day': isWeekend(day.weekDay) || isHoliday(day.date) , 'day-cell' : true }" :style="{width: `${100/ monthDays.length}%`}">
           <div class="day-number" :style="{
             color: isWeekend(day.weekDay)
               ? 'var(--dc-weekend-day-color)'
@@ -30,12 +30,13 @@
       <div :class="{ 'hours-column': true, 'zoomable': zoom }" :style="{ height: calendarBodyHeight }"
         @mousedown="handleZoomStart" @touchstart="handleZoomStart">
         <div v-for="(hour, index) in dayHoursList" :key="index" class="hour-label">
-          {{ hour }}
+          {{ hour.display }}
         </div>
       </div>
       <div class="calendar-body hide-scrollbar" @scroll="handleContentScroll" ref="calendarContent"
         :style="{ height: calendarBodyHeight }">
-        <div class="grid-content" :style="{ minWidth: calendarBodyWidth, maxWidth: calendarBodyWidth}">
+      
+        <div class="grid-content" :style="{ minWidth: calendarBodyWidth, width:'100%'}">
           <div class="horizontal-grid">
             <div v-for="(hour, index) in dayHoursList" :key="index">
               <div class="grid-line-h"></div>
@@ -168,6 +169,10 @@ export default defineComponent({
         return ['ampm', '24h', 'keys'].includes(value)
       },
     },
+    holidays:{
+      type : Array as PropType<Date[]>,
+      default : ()=> [],
+    }
   },
   setup(props) {
     const calendar = ref<HTMLElement | null>(null)
@@ -195,80 +200,124 @@ export default defineComponent({
       }
     }
 
-    const weekdays = [
-      'sunday',
-      'monday',
-      'tuesday',
-      'wednesday',
-      'thursday',
-      'friday',
-      'saturday',
-    ] as const
+    const weekdays = computed(() => {
+      if (props.lang === 'fa') {
+        return [
+          'saturday',
+          'sunday',
+          'monday',
+          'tuesday',
+          'wednesday',
+          'thursday',
+          'friday',
+        ] as const
+      }
+      return [
+        'sunday',
+        'monday',
+        'tuesday',
+        'wednesday',
+        'thursday',
+        'friday',
+        'saturday',
+      ] as const
+    })
 
 
     const toPersianNum = (n: number | string) =>
       String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]!)
 
-    const monthDays = computed(() => {
+
+          const monthDays = computed(() => {
       type DayObject = {
         day: number | string
         weekDay: string
+        date: Date
       }
       const days: DayObject[] = []
 
       // Luxon's weekday: 1=Mon, 7=Sun. We need to map it to our weekdays array index.
       // For 'en' (Sun=0): Sunday is 7 -> 7 % 7 = 0. Monday is 1 -> 1 % 7 = 1.
       // For 'fa' (Sat=0): Saturday is 6 -> (6 + 1) % 7 = 0. Sunday is 7 -> (7 + 1) % 7 = 1.
-      const getWeekdayIndex = (dt: DateTime) => {
+   const getWeekdayIndex = (dt: DateTime) => {
         if (props.lang === 'fa') {
+          // Luxon weekday: Sat=6, Sun=7, Mon=1.
+          // Our 'fa' weekdays array starts with Saturday (index 0).
+          // (6 % 7) = 6 -> not right.
+          // (6 + 1) % 7 = 0 -> Saturday, correct.
+          // (7 + 1) % 7 = 1 -> Sunday, correct.
+          // (1 + 1) % 7 = 2 -> Monday, correct.
           return (dt.weekday + 1) % 7
         }
+        // 'en' weekdays array starts with Sunday (index 0).
+        // Luxon weekday: Sun=7, Mon=1.
+        // 7 % 7 = 0 -> Sunday, correct.
+        // 1 % 7 = 1 -> Monday, correct.
         return dt.weekday % 7
       }
 
-      const addDay = (dt: DateTime) => {
-        if (props.jalaali) {
+
+    const addDay = (dt: DateTime, jalaaliDay?: number) => {
+        let dayNum: number
+        let displayDay: string | number
+
+        if (props.jalaali && jalaaliDay) {
+          dayNum = jalaaliDay
+          displayDay = props.lang === 'fa' ? toPersianNum(jalaaliDay) : jalaaliDay
+        } else if (props.jalaali) {
           const dtJalali = dt.reconfigure({ outputCalendar: 'persian' })
-          days.push({
-            day: props.lang === 'fa' ? toPersianNum(dtJalali.day) : dtJalali.day,
-            weekDay: weekdays[getWeekdayIndex(dt)]!
-          })
+          dayNum = dtJalali.day
+          displayDay = props.lang === 'fa' ? toPersianNum(dtJalali.day) : dtJalali.day
         } else {
-          days.push({
-            day: props.lang === 'fa' ? toPersianNum(dt.day) : dt.day,
-            weekDay: weekdays[getWeekdayIndex(dt)]!
-          })
+          dayNum = dt.day
+          displayDay = props.lang === 'fa' ? toPersianNum(dt.day) : dt.day
         }
+
+        days.push({
+          day: dayNum,
+          displayDay: displayDay,
+          weekDay: weekdays.value[getWeekdayIndex(dt)]!,
+          date: dt.toJSDate()
+        })
       }
+
 
       const startDt = DateTime.fromJSDate(props.startDate)
 
       if (props.mode === 'month') {
-        // Determine the start of the month in the correct calendar system
-        const monthStart = props.jalaali
-          ? startDt.reconfigure({ outputCalendar: 'persian' }).startOf('month')
-          : startDt.startOf('month')
-
-        const daysInMonth = monthStart.daysInMonth!
-        for (let i = 0; i < daysInMonth; i++) {
-          // Add days sequentially from the start of the month
-          addDay(monthStart.plus({ days: i }))
+        if (props.jalaali) {
+          const jd = jalaali.toJalaali(startDt.toJSDate())
+          const monthInfo = jalaali.jalaaliMonthLength(jd.jy, jd.jm)
+          for (let i = 1; i <= monthInfo; i++) {
+            const georgianDate = jalaali.toGregorian(jd.jy, jd.jm, i)
+            const dt = DateTime.fromObject({
+              year: georgianDate.gy,
+              month: georgianDate.gm,
+              day: georgianDate.gd,
+            })
+            addDay(dt, i) // Pass the jalaali day `i` to addDay
+          }
+        } else {
+          const endOfMonth = startDt.endOf('month')
+          for (let i = 1; i <= endOfMonth.day; i++) {
+            addDay(startDt.set({ day: i }))
+          }
         }
       } else if (props.mode === 'week') {
-        // Determine the start of the week based on locale
-        // For 'fa', week starts on Saturday. For 'en', it starts on Sunday.
-        const weekStart = props.jalaali
-          ? startDt.startOf('week', { useLocale: 'fa-IR' })
-          : startDt.startOf('week', { useLocale: 'en-US' })
+        const weekStart =
+          props.lang === 'fa'
+            ? startDt.setLocale('fa-IR').startOf('week')
+            : startDt.setLocale('en-US').startOf('week')
 
         for (let i = 0; i < 7; i++) {
           addDay(weekStart.plus({ days: i }))
         }
       } else if (props.mode === 'custom' && props.endDate) {
+        const endDt = DateTime.fromJSDate(props.endDate)
         let currentDt = startDt.startOf('day')
-        const endDt = DateTime.fromJSDate(props.endDate).endOf('day')
+        const finalDt = endDt.startOf('day')
 
-        while (currentDt <= endDt) {
+        while (currentDt <= finalDt) {
           addDay(currentDt)
           currentDt = currentDt.plus({ days: 1 })
         }
@@ -276,6 +325,8 @@ export default defineComponent({
 
       return days
     })
+      
+
     const weekendDay = computed(() => {
       return props.georgian ? 'sunday' : 'friday'
     })
@@ -353,20 +404,22 @@ export default defineComponent({
       )
     }
 
-       const dayHoursList = computed(() => {
-      const hours = []
+     const dayHoursList = computed(() => {
+      const hours: Array<{ value: number; display: string }> = []
       for (let i = props.startHour; i <= props.endHour; i++) {
+        let displayValue: string
+
         if (props.format === '24h') {
           const time = `${i}:00`
-          hours.push(props.lang === 'fa' ? toPersianNum(time) : time)
+          displayValue = props.lang === 'fa' ? toPersianNum(time) : time
         } else if (props.format === 'ampm') {
           const hour = i % 12 === 0 ? 12 : i % 12
           if (props.lang === 'fa') {
             const period = i < 12 ? 'ق.ظ' : 'ب.ظ'
-            hours.push(`${toPersianNum(hour)} ${period}`)
+            displayValue = `${toPersianNum(hour)} ${period}`
           } else {
             const period = i < 12 ? 'am' : 'pm'
-            hours.push(`${hour} ${period}`)
+            displayValue = `${hour} ${period}`
           }
         } else if (props.format === 'keys') {
           if (props.lang === 'fa') {
@@ -375,7 +428,7 @@ export default defineComponent({
             else if (i >= 6 && i < 12) period = 'صبح' // Morning
             else if (i >= 12 && i < 18) period = 'ظهر' // Afternoon
             else period = 'عصر' // Evening
-            hours.push(`${toPersianNum(i)} ${period}`)
+            displayValue = `${toPersianNum(i)} ${period}`
           } else {
             // English ('en')
             let period = ''
@@ -383,9 +436,16 @@ export default defineComponent({
             else if (i >= 6 && i < 12) period = 'Morning'
             else if (i >= 12 && i < 18) period = 'Afternoon'
             else period = 'Evening'
-            hours.push(`${i}:00 ${period}`)
+            displayValue = `${i}:00 ${period}`
           }
+        } else {
+          displayValue = `${i}:00`
         }
+
+        hours.push({
+          value: i,
+          display: displayValue
+        })
       }
       return hours
     })
@@ -529,7 +589,7 @@ export default defineComponent({
       }
     })
 
-  const processedItems = computed(() => {
+ const processedItems = computed(() => {
       const dayWidth = 100 / monthDays.value.length
       const totalHours = props.endHour - props.startHour
 
@@ -545,11 +605,11 @@ export default defineComponent({
           const dayIndex = monthDays.value.findIndex((day) => {
             const dayDt = props.jalaali
               ? DateTime.fromObject(
-                  { day: day.day as number, month: startDt.month, year: startDt.year },
+                  { day: day.day, month: startDt.month, year: startDt.year },
                   { zone: 'local', numberingSystem: 'latn', outputCalendar: 'persian' }
                 )
               : DateTime.fromObject({
-                  day: day.day as number,
+                  day: day.day,
                   month: startDt.month,
                   year: startDt.year
                 })
@@ -585,7 +645,16 @@ export default defineComponent({
         .filter((item) => item !== null)
     })
 
+     const processedHolidays = computed(() => {
+      return new Set(props.holidays.map(d => new Date(d).setHours(0, 0, 0, 0)))
+    })
+
+    const isHoliday = (date: Date) => {
+      return processedHolidays.value.has(new Date(date).setHours(0, 0, 0, 0))
+    }
+
     return {
+     isHoliday,
       calendarBodyWidth,
       weekendDay,
       calendarContent,
