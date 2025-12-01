@@ -763,39 +763,6 @@ const isCurrentDay = (date: Date) => {
   const dragOffsetY = ref(0)
   const dragGhost = ref<HTMLElement | null>(null)
 
-  const handleDragStart = (event: MouseEvent, item: any, index: number) => {
-    if (!props.editable) return
-
-    // If not selected, select it first
-    if (selectedItemIndex.value !== index) {
-      selectedItemIndex.value = index
-      return
-    }
-
-    // If already selected, start dragging
-    draggingItem.value = { item, originalIndex: index }
-    draggedElement.value = event.currentTarget as HTMLElement
-    dragStartX.value = event.clientX
-    dragStartY.value = event.clientY
-
-    // Create ghost element for visual feedback
-    const ghost = draggedElement.value.cloneNode(true) as HTMLElement
-    const rect = draggedElement.value.getBoundingClientRect()
-    
-    ghost.style.position = 'fixed'
-    ghost.style.pointerEvents = 'none'
-    ghost.style.opacity = '0.7'
-    ghost.style.zIndex = '10000'
-    ghost.style.boxShadow = '0 5px 15px rgba(0,0,0,0.3)'
-    ghost.style.width = `${rect.width}px`
-    ghost.style.height = `${rect.height}px`
-    
-    document.body.appendChild(ghost)
-    dragGhost.value = ghost
-
-    document.addEventListener('mousemove', handleDragMove)
-    document.addEventListener('mouseup', handleDragEnd)
-  }
 
   const handleDragMove = (event: MouseEvent) => {
     if (!draggingItem.value || !dragGhost.value || !calendarContent.value) return
@@ -811,76 +778,104 @@ const isCurrentDay = (date: Date) => {
     dragGhost.value.style.top = `${event.clientY - dragGhost.value.offsetHeight / 2}px`
   }
 
-  const handleDragEnd = (event: MouseEvent) => {
-    if (!draggingItem.value || !calendarContent.value) return
 
-    // Remove ghost element
-    if (dragGhost.value) {
-      dragGhost.value.remove()
-      dragGhost.value = null
-    }
+const handleDragStart = (event: MouseEvent, item: any, index: number) => {
+  if (!props.editable) return
 
-    // Get the calendar content position
-    const calendarRect = calendarContent.value.getBoundingClientRect()
-    const dropX = event.clientX - calendarRect.left + calendarContent.value.scrollLeft
-    const dropY = event.clientY - calendarRect.top + calendarContent.value.scrollTop
-
-    // Calculate which day the item was dropped on
-    const calendarWidth = calendarContent.value.scrollWidth
-    const dayWidth = calendarWidth / monthDays.value.length
-
-    let targetDayIndex = Math.floor(dropX / dayWidth)
-    targetDayIndex = Math.max(0, Math.min(targetDayIndex, monthDays.value.length - 1))
-
-    // Calculate the time based on drop position
-    const contentHeight = calendarContent.value.clientHeight
-    const totalHours = props.endHour - props.startHour
-    const pixelsPerHour = (dayHoursList.value.length * zoomAmount.value * dayCellHeight.value) / totalHours
-
-    // Adjust for top padding
-    const adjustedDropY = dropY - topPadding.value
-    const hourOffset = Math.max(0, adjustedDropY / pixelsPerHour)
-
-    // Get the original item
-    const originalItem = draggingItem.value.item
-    const itemDuration = originalItem.end.getTime() - originalItem.start.getTime()
-
-    // Get the target date
-    const targetDate = monthDays.value[targetDayIndex]?.date
-    if (!targetDate) {
-      resetDrag()
-      return
-    }
-
-    // Create new start time
-    const newStart = new Date(targetDate)
-    newStart.setHours(props.startHour + Math.floor(hourOffset))
-    newStart.setMinutes((hourOffset % 1) * 60)
-    newStart.setSeconds(0)
-    newStart.setMilliseconds(0)
-
-    // Create new end time
-    const newEnd = new Date(newStart.getTime() + itemDuration)
-
-    // Update the item with smooth transition
-    const updatedItems = props.modelValue.map((item, idx) => {
-      if (idx === draggingItem.value!.originalIndex) {
-        return {
-          ...item,
-          start: newStart,
-          end: newEnd
-        }
-      }
-      return item
-    })
-
-    emit('update:modelValue', updatedItems)
-    
-    // Add a small delay to allow the DOM to update before resetting
-    setTimeout(() => {
-      resetDrag()
-    }, 300)
+  if (selectedItemIndex.value !== index) {
+    selectedItemIndex.value = index
+    return
   }
+
+  draggingItem.value = { item, originalIndex: index }
+  draggedElement.value = event.currentTarget as HTMLElement
+  dragStartX.value = event.clientX
+  dragStartY.value = event.clientY
+
+  // ADD dragging class to disable transitions DURING drag
+  draggedElement.value.classList.add('dragging')
+
+  const ghost = draggedElement.value.cloneNode(true) as HTMLElement
+  const rect = draggedElement.value.getBoundingClientRect()
+  
+  ghost.style.position = 'fixed'
+  ghost.style.pointerEvents = 'none'
+  ghost.style.opacity = '0.7'
+  ghost.style.zIndex = '10000'
+  ghost.style.boxShadow = '0 5px 15px rgba(0,0,0,0.3)'
+  ghost.style.width = `${rect.width}px`
+  ghost.style.height = `${rect.height}px`
+  
+  document.body.appendChild(ghost)
+  dragGhost.value = ghost
+
+  handleDragMove(event)
+  document.addEventListener('mousemove', handleDragMove)
+  document.addEventListener('mouseup', handleDragEnd)
+}
+
+const handleDragEnd = (event: MouseEvent) => {
+  if (!draggingItem.value || !calendarContent.value) return
+
+  if (dragGhost.value) {
+    dragGhost.value.remove()
+    dragGhost.value = null
+  }
+
+  const calendarRect = calendarContent.value.getBoundingClientRect()
+  const dropX = event.clientX - calendarRect.left + calendarContent.value.scrollLeft
+  const dropY = event.clientY - calendarRect.top + calendarContent.value.scrollTop
+
+  const calendarWidth = calendarContent.value.scrollWidth
+  const dayWidth = calendarWidth / monthDays.value.length
+
+  let targetDayIndex = Math.floor(dropX / dayWidth)
+  targetDayIndex = Math.max(0, Math.min(targetDayIndex, monthDays.value.length - 1))
+
+  const contentHeight = calendarContent.value.clientHeight
+  const totalHours = props.endHour - props.startHour
+  const pixelsPerHour = (dayHoursList.value.length * zoomAmount.value * dayCellHeight.value) / totalHours
+
+  const adjustedDropY = dropY - topPadding.value
+  const hourOffset = Math.max(0, adjustedDropY / pixelsPerHour)
+
+  const originalItem = draggingItem.value.item
+  const itemDuration = originalItem.end.getTime() - originalItem.start.getTime()
+
+  const targetDate = monthDays.value[targetDayIndex]?.date
+  if (!targetDate) {
+    resetDrag()
+    return
+  }
+
+  const newStart = new Date(targetDate)
+  newStart.setHours(props.startHour + Math.floor(hourOffset))
+  newStart.setMinutes((hourOffset % 1) * 60)
+  newStart.setSeconds(0)
+  newStart.setMilliseconds(0)
+
+  const newEnd = new Date(newStart.getTime() + itemDuration)
+
+  const updatedItems = props.modelValue.map((item, idx) => {
+    if (idx === draggingItem.value!.originalIndex) {
+      return {
+        ...item,
+        start: newStart,
+        end: newEnd
+      }
+    }
+    return item
+  })
+
+  emit('update:modelValue', updatedItems)
+  
+  // REMOVE dragging class to RE-ENABLE transitions AFTER drag
+  if (draggedElement.value) {
+    draggedElement.value.classList.remove('dragging')
+  }
+  
+  resetDrag()
+}
 
   const resetDrag = () => {
     draggingItem.value = null
