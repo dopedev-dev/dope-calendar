@@ -40,7 +40,7 @@
       </div>
       <div class="calendar-body hide-scrollbar" @scroll="handleContentScroll" ref="calendarContent"
         :style="{ height: calendarBodyHeight }">
-      
+
         <div class="grid-content" :style="{ minWidth: calendarBodyWidth, width:'100%'}">
           <div class="horizontal-grid">
             <div v-for="(hour, index) in dayHoursList" :key="index">
@@ -53,27 +53,37 @@
             </div>
           </div>
           <div class="content">
-           <div v-for="item in processedItems" :key="item.id" :style="item.style" class="calendar-item-wrapper">
-              <div
-                class="resize-handle top"
-                @mousedown.stop="(event) => handleResizeStart(event, item, 'top')"
-              ></div>
-              <!-- content goes here : -->
-              <slot name="item" :item="item">
-              </slot>
-              <div
-                class="resize-handle bottom"
-                @mousedown.stop="(event) => handleResizeStart(event, item, 'bottom')"
-              ></div>
-            </div>
-          </div>        
+       <div
+  v-for="(item, index) in processedItems"
+  :key="item.id"
+  class="calendar-item-wrapper"
+  :style="item.style"
+  @mousedown="handleDragStart($event, item, index)"
+>
+  <div class="default-item">
+    <div class="resize-handle-top" @mousedown.stop="handleResizeStart($event, item, 'top')"></div>
+    
+    <slot name="item" :item="item">
+      <div class="item-content">
+        <div class="item-title">{{ item.title }}</div>
+        <div class="item-time">
+          {{ item.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }} -
+          {{ item.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
+        </div>
+      </div>
+    </slot>
+
+    <div class="resize-handle-bottom" @mousedown.stop="handleResizeStart($event, item, 'bottom')"></div>
+  </div>
+</div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </template>
 <script lang="ts">
-import { type PropType, ref, defineComponent, onMounted ,computed } from 'vue'
+import { type PropType, ref, defineComponent,watch, onMounted ,computed } from 'vue'
 import jalaali from 'jalaali-js'
 interface CalendarItem {
   start: Date
@@ -97,6 +107,10 @@ export default defineComponent({
         }
         return true
       },
+    },
+    editable: {
+      type: Boolean,
+      default: false
     },
     zoom: {
       type: Boolean,
@@ -184,7 +198,7 @@ export default defineComponent({
     }
   }, 
   emits:['update:modelValue'],
-  setup(props,{emit}) {
+  setup(props, { emit, slots }) {
     const calendar = ref<HTMLElement | null>(null)
     const calendarContent = ref<HTMLElement | null>(null)
     const calendarHeader = ref<HTMLElement | null>(null)
@@ -194,7 +208,7 @@ export default defineComponent({
 
 
     useDragToScroll(calendarHeader)
-    useDragToScroll(calendarContent, isZooming.value)
+    // useDragToScroll(calendarContent, isZooming.value)
 
 
 
@@ -678,86 +692,251 @@ const isCurrentDay = (date: Date) => {
   )
 }
 
-  const resizingItem = ref<{ item: any; handle: 'top' | 'bottom' } | null>(null)
-    const initialY = ref(0)
-    const initialStart = ref<Date | null>(null)
-    const initialEnd = ref<Date | null>(null)
+  const resizingItem = ref<{ item: any; handle: 'top' | 'bottom'; originalIndex: number } | null>(null)
+  const initialY = ref(0)
+  const initialStart = ref<Date | null>(null)
+  const initialEnd = ref<Date | null>(null)
 
-    const handleResizeStart = (event: MouseEvent, item: any, handle: 'top' | 'bottom') => {
-      resizingItem.value = { item, handle }
+  const draggingItem = ref<{ item: any; originalIndex: number; originalStyle: any } | null>(null)
+  const dragOffsetX = ref(0)
+  const dragOffsetY = ref(0)
+  const draggedElement = ref<HTMLElement | null>(null)
+  const dragStartTime = ref(0)
+
+  const handleResizeStart = (event: MouseEvent, item: any, handle: 'top' | 'bottom') => {
+      if (!props.editable) return
+
+      const originalIndex = props.modelValue.findIndex(
+        (i) => i.start.getTime() === item.start.getTime() && i.end.getTime() === item.end.getTime()
+      )
+      
+      if (originalIndex === -1) return
+
+      resizingItem.value = { item, handle, originalIndex }
       initialY.value = event.clientY
       initialStart.value = new Date(item.start)
       initialEnd.value = new Date(item.end)
-
+      
       document.addEventListener('mousemove', handleResizing)
       document.addEventListener('mouseup', handleResizeEnd)
-    }
+  }
 
-
-
-
-   const handleResizing = (event: MouseEvent) => {
-      if (!resizingItem.value || !calendarContent.value) return
+  const handleResizing = (event: MouseEvent) => {
+      if (!resizingItem.value || !calendarContent.value || !props.editable) return
 
       const deltaY = event.clientY - initialY.value
-      const calendarHeight = calendarContent.value.scrollHeight
+      const calendarRect = calendarContent.value.getBoundingClientRect()
+      const calendarHeight = calendarRect.height
       const totalMinutes = (props.endHour - props.startHour) * 60
       const minutesPerPixel = totalMinutes / calendarHeight
 
       const deltaMinutes = deltaY * minutesPerPixel
 
-      const { item, handle } = resizingItem.value
-      const newItems = props.modelValue.map((i) => (i === item.originalItem ? { ...i } : i))
-      const itemToUpdate = newItems.find((i) => i === item.originalItem)
+      const { handle, originalIndex } = resizingItem.value
+      
+      if (originalIndex === -1 || !initialStart.value || !initialEnd.value) return
 
-      if (!itemToUpdate || !initialStart.value || !initialEnd.value) return
+      const newItems = props.modelValue.map((item) => ({
+        ...item,
+        start: new Date(item.start),
+        end: new Date(item.end)
+      }))
+
+      const itemToUpdate = newItems[originalIndex]
 
       if (handle === 'top') {
         const newStart = new Date(initialStart.value.getTime() + deltaMinutes * 60000)
-        // Ensure start time does not go past end time (with a 5-minute buffer)
-        if (newStart.getTime() < initialEnd.value.getTime() - 5 * 60000) {
+        if (newStart.getTime() < itemToUpdate.end.getTime() - 5 * 60000) {
           itemToUpdate.start = newStart
         }
       } else {
-        // handle === 'bottom'
         const newEnd = new Date(initialEnd.value.getTime() + deltaMinutes * 60000)
-        // Ensure end time does not go before start time (with a 5-minute buffer)
-        if (newEnd.getTime() > initialStart.value.getTime() + 5 * 60000) {
+        if (newEnd.getTime() > itemToUpdate.start.getTime() + 5 * 60000) {
           itemToUpdate.end = newEnd
         }
       }
-      emit('update:modelValue', newItems)
-    }
 
-    const handleResizeEnd = () => {
+      emit('update:modelValue', newItems)
+  }
+
+  const handleResizeEnd = () => {
       resizingItem.value = null
+      initialStart.value = null
+      initialEnd.value = null
       document.removeEventListener('mousemove', handleResizing)
       document.removeEventListener('mouseup', handleResizeEnd)
-    }
+  }
 
-    return {
-      isCurrentDay,
-     isHoliday,
-      calendarBodyWidth,
-      weekendDay,
-      calendarContent,
-      calendarHeader,
-      contentContainer,
-      monthDays,
-      getDayTitle,
-      handleContentScroll,
-      calendar,
+  const handleDragStart = (event: MouseEvent, item: any, index: number) => {
+      if (!props.editable) return
+
+      const target = event.currentTarget as HTMLElement
+      const rect = target.getBoundingClientRect()
+      
+      dragOffsetX.value = event.clientX - rect.left
+      dragOffsetY.value = event.clientY - rect.top
+      dragStartTime.value = Date.now()
+      
+      const originalIndex = props.modelValue.findIndex(
+        (i) => i.start.getTime() === item.start.getTime() && i.end.getTime() === item.end.getTime()
+      )
+
+      draggingItem.value = {
+        item: { ...item, start: new Date(item.start), end: new Date(item.end) },
+        originalIndex,
+        originalStyle: {
+          top: target.style.top,
+          left: target.style.left,
+          position: target.style.position,
+          zIndex: target.style.zIndex,
+          opacity: target.style.opacity,
+          transition: target.style.transition
+        }
+      }
+
+      target.style.opacity = '0.7'
+      target.style.zIndex = '1000'
+      target.style.transition = 'none'
+      target.style.cursor = 'grabbing'
+      draggedElement.value = target
+
+      document.addEventListener('mousemove', handleDragMove)
+      document.addEventListener('mouseup', handleDragEnd)
+  }
+
+  const handleDragMove = (event: MouseEvent) => {
+      if (!draggingItem.value || !draggedElement.value || !calendarContent.value) return
+
+      const calendarRect = calendarContent.value.getBoundingClientRect()
+      const x = event.clientX - calendarRect.left - dragOffsetX.value
+      const y = event.clientY - calendarRect.top - dragOffsetY.value
+
+      draggedElement.value.style.position = 'fixed'
+      draggedElement.value.style.left = `${event.clientX - dragOffsetX.value}px`
+      draggedElement.value.style.top = `${event.clientY - dragOffsetY.value}px`
+      draggedElement.value.style.pointerEvents = 'none'
+  }
+
+  const handleDragEnd = async (event: MouseEvent) => {
+      if (!draggingItem.value || !draggedElement.value || !calendarContent.value) return
+
+      const calendarRect = calendarContent.value.getBoundingClientRect()
+      const dropX = event.clientX - calendarRect.left
+      const dropY = event.clientY - calendarRect.top
+
+      const isWithinCalendar =
+        dropX >= 0 &&
+        dropX <= calendarRect.width &&
+        dropY >= 0 &&
+        dropY <= calendarRect.height
+
+      if (isWithinCalendar) {
+        // Calculate new position
+        const dayWidth = calendarRect.width / monthDays.value.length
+        const dayIndex = Math.floor(dropX / dayWidth)
+
+        if (dayIndex >= 0 && dayIndex < monthDays.value.length) {
+          const totalHours = props.endHour - props.startHour
+          const contentHeight =
+            dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
+
+          const hourOffset = (dropY / contentHeight) * totalHours
+          const newHour = Math.floor(props.startHour + hourOffset)
+          const newMinute = Math.floor((hourOffset % 1) * 60)
+
+          const targetDay = monthDays.value[dayIndex]
+          const newStart = new Date(targetDay.date)
+          newStart.setHours(newHour, newMinute, 0, 0)
+
+          const duration = draggingItem.value.item.end.getTime() - draggingItem.value.item.start.getTime()
+          const newEnd = new Date(newStart.getTime() + duration)
+
+          const newItems = props.modelValue.map((item, idx) => {
+            if (idx === draggingItem.value!.originalIndex) {
+              return {
+                ...item,
+                start: newStart,
+                end: newEnd
+              }
+            }
+            return item
+          })
+
+          emit('update:modelValue', newItems)
+
+          // Smooth transition to new position
+          draggedElement.value.style.transition = 'all 300ms cubic-bezier(0.34, 1.56, 0.64, 1)'
+          draggedElement.value.style.position = 'absolute'
+          draggedElement.value.style.left = draggingItem.value.originalStyle.left
+          draggedElement.value.style.top = draggingItem.value.originalStyle.top
+          draggedElement.value.style.opacity = '1'
+
+          await new Promise(resolve => setTimeout(resolve, 300))
+        } else {
+          // Out of bounds, snap back
+          await snapBackToDragStart()
+        }
+      } else {
+        // Outside calendar, snap back
+        await snapBackToDragStart()
+      }
+
+      resetDragState()
+  }
+
+  const snapBackToDragStart = async () => {
+      if (!draggedElement.value) return
+
+      draggedElement.value.style.transition = 'all 300ms cubic-bezier(0.34, 1.56, 0.64, 1)'
+      draggedElement.value.style.position = draggingItem.value!.originalStyle.position
+      draggedElement.value.style.left = draggingItem.value!.originalStyle.left
+      draggedElement.value.style.top = draggingItem.value!.originalStyle.top
+      draggedElement.value.style.opacity = draggingItem.value!.originalStyle.opacity
+
+      await new Promise(resolve => setTimeout(resolve, 300))
+  }
+
+  const resetDragState = () => {
+      if (draggedElement.value) {
+        draggedElement.value.style.zIndex = draggingItem.value?.originalStyle.zIndex || '1'
+        draggedElement.value.style.cursor = 'grab'
+        draggedElement.value.style.pointerEvents = 'auto'
+      }
+
+      draggingItem.value = null
+      draggedElement.value = null
+      dragOffsetX.value = 0
+      dragOffsetY.value = 0
+
+      document.removeEventListener('mousemove', handleDragMove)
+      document.removeEventListener('mouseup', handleDragEnd)
+  }
 
 
-      isWeekend,
-      dayHoursList,
-      calendarBodyHeight,
-      handleZoomStart,
-      handleHeaderScroll,
-      processedItems,
+  return {
+    isCurrentDay,
+    isHoliday,
+    calendarBodyWidth,
+    weekendDay,
+    calendarContent,
+    calendarHeader,
+    contentContainer,
+    monthDays,
+    getDayTitle,
+    handleContentScroll,
+    calendar,
+
+
+    isWeekend,
+    dayHoursList,
+    calendarBodyHeight,
+    handleZoomStart,
+    handleHeaderScroll,
+    processedItems,
       // resizing : 
-      handleResizeEnd,
-      handleResizeStart,
+    handleResizeEnd,
+    handleResizeStart,
+    handleDragStart,
     }
   },
 })
@@ -980,20 +1159,21 @@ const isCurrentDay = (date: Date) => {
   box-sizing: border-box;
 }
 
-.resize-handle {
+.resize-handle-top,
+.resize-handle-bottom {
   position: absolute;
   left: 0;
   right: 0;
-  height: 8px; 
+  height: 8px;
   cursor: ns-resize;
-  z-index: 2;
+  z-index: 10;
 }
 
-.resize-handle.top {
-  top: -4px; 
+.resize-handle-top {
+  top: 0;
 }
 
-.resize-handle.bottom {
-  bottom: -4px; 
+.resize-handle-bottom {
+  bottom: 0;
 }
 </style>

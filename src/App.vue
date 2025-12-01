@@ -5,7 +5,8 @@
       :jalaali="true"
       mode="month"
       dir="ltr"
-      lang="en"
+      lang="fa"
+      editable
       :holidays="holidays"
       v-model="calendarItems"
     >
