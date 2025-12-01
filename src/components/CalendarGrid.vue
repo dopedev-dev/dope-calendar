@@ -1260,12 +1260,6 @@ const handleCalendarClick = (event: MouseEvent) => {
   cursor: grab;
 }
 
-.calendar-item-wrapper.selected {
-  box-shadow: 0 0 0 3px rgba(54, 162, 235, 0.5), 0 4px 12px rgba(0, 0, 0, 0.15);
-  outline: 2px solid rgba(54, 162, 235, 0.8);
-  outline-offset: 2px;
-}
-
 .calendar-item-wrapper.no-transition {
   /* Disable all transitions when snapping to released position */
   transition: none !important;

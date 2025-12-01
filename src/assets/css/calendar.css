@@ -1,7 +1,5 @@
 .dope-calendar-grid {
-  /* Grid */
-    --dc-font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+    --dc-font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
   font-family: var(--dc-font-family);
   --dc-bg: #f3f3f7;
   --dc-border-color: #d1d6db;
@@ -9,40 +7,26 @@
   --dc-day-container-width: 56px;
   --dc-day-cell-width: 40px;
   --dc-day-cell-height: 36px;
-
-  /* Day Number */
   --dc-day-number-color: black;
   --dc-day-number-font-size: 12px;
   --dc-day-number-font-weight: 700;
-
-  /* Day Name */
   --dc-day-name-color: rgba(0, 0, 0, 0.5);
   --dc-day-name-font-size: 10px;
   --dc-day-name-font-weight: 400;
-
-  /* Hour Text */
   --dc-hour-text-color: rgba(0, 0, 0, 0.5);
-
-  /* Weekend */
-  --dc-weekend-day-color: rgba(248, 113, 113, 0.5); /* red-400 with 50% opacity */
-  --dc-current-day-color: rgba(0, 36, 199, 1); /* red with 50% opacity */
+  --dc-weekend-day-color: rgba(248, 113, 113, 0.5); 
+  --dc-current-day-color: rgba(0, 36, 199, 1); 
 }
-
-/* Dark theme styles */
+.selected {
+  box-shadow: 0 0 0 3px rgba(54, 162, 235, 0.5), 0 4px 12px rgba(0, 0, 0, 0.15);
+  outline: 2px solid rgba(54, 162, 235, 0.8);
+  outline-offset: 2px;
+}
 [data-theme='dark'] .dope-calendar-grid {
-  /* Grid */
   --dc-bg: #141519;
-  --dc-border-color: rgba(209, 214, 219, 0.35); /* #D1D6DB with 35% opacity */
-
-  /* Day Number */
+  --dc-border-color: rgba(209, 214, 219, 0.35); 
   --dc-day-number-color: white;
-
-  /* Day Name */
   --dc-day-name-color: rgba(255, 255, 255, 0.5);
-
-  /* Hour Text */
   --dc-hour-text-color: rgba(255, 255, 255, 0.5);
-
-  /* Weekend */
-  --dc-weekend-day-color: rgba(250, 225, 229, 0.5); /* #FAE1E5 with 50% opacity */
+  --dc-weekend-day-color: rgba(250, 225, 229, 0.5); 
 }
