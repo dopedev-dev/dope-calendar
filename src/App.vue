@@ -23,7 +23,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { ref } from 'vue'
 import CalendarGrid from './components/CalendarGrid.vue'
 const today = new Date()
 const calendarItems = ref(
@@ -104,42 +104,6 @@ const calendarItems = ref(
 const holidays = ref([
   new Date(new Date().setDate(today.getDate() + 5)) // Example holiday 5 days from now
 ])
-
-const goToNextDay = () => {
-  if (calendarItems.value.length > 0) {
-    const firstItem = calendarItems.value[0]
-    const newStartDate = new Date(firstItem.start)
-    newStartDate.setDate(newStartDate.getDate() + 1)
-    const newEndDate = new Date(firstItem.end)
-    newEndDate.setDate(newEndDate.getDate() + 1)
-    calendarItems.value[0] = {
-      ...firstItem,
-      start: newStartDate,
-      end: newEndDate,
-    }
-        console.log(calendarItems.value[0]?.start,calendarItems.value[0]?.end)
-  }
-}
-
-const goToPrevDay = () => {
-  if (calendarItems.value.length > 0) {
-    const firstItem = calendarItems.value[0]
-    const newStartDate = new Date(firstItem.start)
-    newStartDate.setDate(newStartDate.getDate() - 1)
-    const newEndDate = new Date(firstItem.end)
-    newEndDate.setDate(newEndDate.getDate() - 1)
-    calendarItems.value[0] = {
-      ...firstItem,
-      start: newStartDate,
-      end: newEndDate,
-    }
-    console.log(calendarItems.value[0]?.start,calendarItems.value[0]?.end)
-  }
-}
-
-onMounted(()=>{
-  console.log(holidays.value)
-})
 </script>
 <style scoped>
 .custom-calendar-item{

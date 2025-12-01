@@ -1041,6 +1041,7 @@ const handleCalendarClick = (event: MouseEvent) => {
 </script>
 <style scoped>
 @import '@/assets/css/calendar.css';
+
 .content {
   position: relative;
   width: 100%;
@@ -1056,6 +1057,7 @@ const handleCalendarClick = (event: MouseEvent) => {
   overflow: hidden;
   font-size: 12px;
 }
+
 .calendar-wrapper {
   width: 100%;
   height: 100%;
@@ -1125,7 +1127,6 @@ const handleCalendarClick = (event: MouseEvent) => {
   overflow-y: auto;
   background-color: var(--dc-bg);
 }
-
 
 .hours-column {
   flex-shrink: 0;
@@ -1249,7 +1250,6 @@ const handleCalendarClick = (event: MouseEvent) => {
   cursor: grabbing;
 }
 
-
 .calendar-item-wrapper {
   position: absolute;
   width: 100%;
@@ -1261,12 +1261,10 @@ const handleCalendarClick = (event: MouseEvent) => {
 }
 
 .calendar-item-wrapper.no-transition {
-  /* Disable all transitions when snapping to released position */
   transition: none !important;
 }
 
 .calendar-item-wrapper.transition-to-final {
-  /* Only transition when moving from released position to final position */
   transition: top 0.3s ease-out, left 0.3s ease-out;
 }
 
