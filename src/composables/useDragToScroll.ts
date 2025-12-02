@@ -10,8 +10,11 @@ export function useDragToScroll(
   let startY: number
   let scrollTop: number
 
-  const handleMouseDown = (e: MouseEvent) => {
+    const handleMouseDown = (e: MouseEvent) => {
     if (!elementRef.value) return
+    // Check if scrolling is disabled
+    if (elementRef.value.classList.contains('scroll-disabled')) return
+    
     isDown = true
     elementRef.value.classList.remove('cursor-grab')
     elementRef.value.classList.add('cursor-grabbing')
@@ -19,8 +22,9 @@ export function useDragToScroll(
     scrollLeft = elementRef.value.scrollLeft
     startY = e.pageY - elementRef.value.offsetTop
     scrollTop = elementRef.value.scrollTop
-    e.preventDefault() // Prevent text selection
+    e.preventDefault()
   }
+
 
   const handleMouseLeave = () => {
     if (!elementRef.value) return

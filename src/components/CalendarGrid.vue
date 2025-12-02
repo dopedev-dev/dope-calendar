@@ -32,7 +32,7 @@
       </div>
     </div>
     <div ref="contentContainer" class="content-container hide-scrollbar">
-      <div :class="{ 'hours-column': true, 'zoomable': zoom }" :style="{ height: calendarBodyHeight }"
+      <div :class="{ 'hours-column': true, 'hide-scrollbar':true,'zoomable': zoom }" :style="{ height: calendarBodyHeight }"
         @mousedown="handleZoomStart" @touchstart="handleZoomStart">
         <div v-for="(hour, index) in dayHoursList" :key="index" class="hour-label">
           {{ hour.display }}
@@ -64,10 +64,11 @@
   }"
   :style="item.style"
   @mousedown="handleDragStart($event, item, index)"
+  @touchstart="handleDragStart($event, item, index)"
   @click="handleItemClick($event, index)"
 >
               <div class="default-item">
-                <div class="resize-handle-top" @mousedown.stop="handleResizeStart($event, item, 'top')"></div>
+                <div class="resize-handle-top" @touchstart.stop="handleResizeStart($event, item, 'top')" @mousedown.stop="handleResizeStart($event, item, 'top')"></div>
                 
                 <slot name="item" :item="item">
                   <!-- <div class="item-content">
@@ -81,24 +82,28 @@
                  <div
               v-if="selectedItemIndex === index"
               class="resize-handle-left"
+              @touchstart.stop="handleHorizontalResizeStart($event, item, 'left')"
               @mousedown.stop="handleHorizontalResizeStart($event, item, 'left')"
             ></div>
               <div
               v-if="editable"
               class="resize-handle-horizontal left"
+              @touchstart.stop="handleHorizontalResizeStart($event, item, 'left')"
               @mousedown.stop="handleHorizontalResizeStart($event, item, 'left')"
             ></div>
             <div
               v-if="editable"
               class="resize-handle-horizontal right"
+              @touchstart.stop="handleHorizontalResizeStart($event, item, 'right')"
               @mousedown.stop="handleHorizontalResizeStart($event, item, 'right')"
             ></div>
             <div
               v-if="selectedItemIndex === index"
               class="resize-handle-right"
+              @touchstart.stop="handleHorizontalResizeStart($event, item, 'right')"
               @mousedown.stop="handleHorizontalResizeStart($event, item, 'right')"
             ></div>
-                <div class="resize-handle-bottom" @mousedown.stop="handleResizeStart($event, item, 'bottom')"></div>
+                <div class="resize-handle-bottom" @touchstart.stop="handleResizeStart($event, item, 'bottom')" @mousedown.stop="handleResizeStart($event, item, 'bottom')"></div>
               </div>
             </div>
           </div>
@@ -240,6 +245,7 @@ export default defineComponent({
     // useDragToScroll(calendarContent, isZooming.value)
 
 
+   
 
     const handleContentScroll = () => {
       if (calendarHeader.value && calendarContent.value) {
@@ -748,33 +754,36 @@ const isCurrentDay = (date: Date) => {
 
 
 
-const handleResizeStart = (event: MouseEvent, item: any, handle: 'top' | 'bottom') => {
-      if (!props.editable) return
+const handleResizeStart = (event: MouseEvent | TouchEvent, item: any, handle: 'top' | 'bottom') => {
+  if (!props.editable) return
 
-      const originalIndex = props.modelValue.findIndex(
-        (i) => i.start.getTime() === item.start.getTime() && i.end.getTime() === item.end.getTime()
-      )
-      
-      if (originalIndex === -1) return
+  const originalIndex = props.modelValue.findIndex(
+    (i) => i.start.getTime() === item.start.getTime() && i.end.getTime() === item.end.getTime()
+  )
+  
+  if (originalIndex === -1) return
 
-      resizingItem.value = { item, handle, originalIndex }
-      initialY.value = event.clientY
-      initialStart.value = new Date(item.start)
-      initialEnd.value = new Date(item.end)
-      
-      // Disable transitions on all items during resize
-      const allItems = document.querySelectorAll('.calendar-item-wrapper')
-      allItems.forEach(el => el.classList.add('no-transition'))
-      
-      document.addEventListener('mousemove', handleResizing)
-      document.addEventListener('mouseup', handleResizeEnd)
-  }
+  resizingItem.value = { item, handle, originalIndex }
+  initialY.value = 'touches' in event ? event.touches[0].clientY : event.clientY
+  initialStart.value = new Date(item.start)
+  initialEnd.value = new Date(item.end)
+  
+  // Disable transitions on all items during resize
+  const allItems = document.querySelectorAll('.calendar-item-wrapper')
+  allItems.forEach(el => el.classList.add('no-transition'))
+  
+  document.addEventListener('mousemove', handleResizing)
+  document.addEventListener('mouseup', handleResizeEnd)
+  document.addEventListener('touchmove', handleResizing, { passive: false })
+  document.addEventListener('touchend', handleResizeEnd)
+}
 
-
-const handleResizing = (event: MouseEvent) => {
+const handleResizing = (event: MouseEvent | TouchEvent) => {
   if (!resizingItem.value || !calendarContent.value || !props.editable) return
+  event.preventDefault()
 
-  const deltaY = event.clientY - initialY.value
+  const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY
+  const deltaY = clientY - initialY.value
   const calendarRect = calendarContent.value.getBoundingClientRect()
   const calendarHeight = calendarRect.height
   const totalMinutes = (props.endHour - props.startHour) * 60
@@ -796,7 +805,7 @@ const handleResizing = (event: MouseEvent) => {
   }))
 
   const itemToUpdate = newItems[originalIndex]
-  const minDurationMs = props.minTime * 60000 // Convert minTime (in minutes) to milliseconds
+  const minDurationMs = props.minTime * 60000
 
   if (handle === 'top') {
     const newStart = new Date(initialStart.value.getTime() + steppedDeltaMinutes * 60000)
@@ -814,20 +823,22 @@ const handleResizing = (event: MouseEvent) => {
 }
 
 
-  const handleResizeEnd = () => {
-      resizingItem.value = null
-      initialStart.value = null
-      initialEnd.value = null
-      
-      // Re-enable transitions on all items after resize
-      const allItems = document.querySelectorAll('.calendar-item-wrapper')
-      allItems.forEach(el => el.classList.remove('no-transition'))
-      
-      document.removeEventListener('mousemove', handleResizing)
-      document.removeEventListener('mouseup', handleResizeEnd)
-  }
-
+const handleResizeEnd = () => {
+  resizingItem.value = null
+  initialStart.value = null
+  initialEnd.value = null
   
+  // Re-enable transitions on all items after resize
+  const allItems = document.querySelectorAll('.calendar-item-wrapper')
+  allItems.forEach(el => el.classList.remove('no-transition'))
+  
+  document.removeEventListener('mousemove', handleResizing)
+  document.removeEventListener('mouseup', handleResizeEnd)
+  document.removeEventListener('touchmove', handleResizing)
+  document.removeEventListener('touchend', handleResizeEnd)
+}
+
+
 const draggingItem = ref<{ item: any; originalIndex: number } | null>(null)
 const selectedItemIndex = ref<number | null>(null)
 const draggedElement = ref<HTMLElement | null>(null)
@@ -836,64 +847,71 @@ const dragStartY = ref(0)
 const dragGhost = ref<HTMLElement | null>(null)
 const selectedIndex = ref(-1)
 
+ watch(selectedItemIndex, (newIndex) => {
+  if (newIndex !== null) {
+    calendarHeader.value?.classList.add('scroll-disabled')
+    calendarContent.value?.classList.add('scroll-disabled')
+    contentContainer.value?.classList.add('scroll-disabled')
+  } else {
+    calendarHeader.value?.classList.remove('scroll-disabled')
+    calendarContent.value?.classList.remove('scroll-disabled')
+    contentContainer.value?.classList.remove('scroll-disabled')
+  }
+})
+
 const overriddenItemIndex = ref<number | null>(null)
 const overriddenItemStyle = ref<{ top: string; left: string } | null>(null)
 
 
-const handleDragMove = (event: MouseEvent) => {
+const handleDragMove = (event: MouseEvent | TouchEvent) => {
   if (!draggingItem.value || !dragGhost.value || !calendarContent.value) return
+  event.preventDefault()
+  
+  const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX
+  const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY
 
-  // Calculate position relative to calendar content
   const calendarRect = calendarContent.value.getBoundingClientRect()
   const calendarWidth = calendarContent.value.scrollWidth
   const dayWidth = calendarWidth / monthDays.value.length
 
-  // Get ghost element bounds
   const ghostRect = dragGhost.value.getBoundingClientRect()
   
-  // Calculate left and right edges of the ghost relative to calendar
   const ghostLeftRelative = ghostRect.left - calendarRect.left + calendarContent.value.scrollLeft
   const ghostRightRelative = ghostRect.right - calendarRect.left + calendarContent.value.scrollLeft
 
-  // Determine which day the leading edge (top-left for LTR, top-right for RTL) is in
   let leadingEdgePosition: number
 
   if (props.dir === 'rtl') {
-    // In RTL, the leading edge is the right side
     leadingEdgePosition = ghostRightRelative
   } else {
-    // In LTR, the leading edge is the left side
     leadingEdgePosition = ghostLeftRelative
   }
 
-  // Determine which day the leading edge is in
   let targetDayIndex = Math.floor(leadingEdgePosition / dayWidth)
-
-  // Clamp to valid range immediately
   targetDayIndex = Math.max(0, Math.min(targetDayIndex, monthDays.value.length - 1))
   selectedIndex.value = targetDayIndex
 
-  // Update ghost position
-  dragGhost.value.style.left = `${event.clientX - dragGhost.value.offsetWidth / 2}px`
-  dragGhost.value.style.top = `${event.clientY - dragGhost.value.offsetHeight / 2}px`
+  dragGhost.value.style.left = `${clientX - dragGhost.value.offsetWidth / 2}px`
+  dragGhost.value.style.top = `${clientY - dragGhost.value.offsetHeight / 2}px`
 }
 
-const handleDragStart = (event: MouseEvent, item: any, index: number) => {
+
+const handleDragStart = (event: MouseEvent | TouchEvent, item: any, index: number) => {
   if (!props.editable) return
+  event.preventDefault()
 
   if (selectedItemIndex.value !== index) {
     selectedItemIndex.value = index
     return
   }
 
-  // Use the original item from modelValue, not the processed item
   const originalItem = props.modelValue[index]
   draggingItem.value = { item: originalItem, originalIndex: index }
   draggedElement.value = event.currentTarget as HTMLElement
-  dragStartX.value = event.clientX
-  dragStartY.value = event.clientY
-
-  // ADD dragging class to disable transitions DURING drag
+  const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX
+  const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY
+  dragStartX.value = clientX
+  dragStartY.value = clientY
   draggedElement.value.classList.add('dragging')
 
   const ghost = draggedElement.value.cloneNode(true) as HTMLElement
@@ -913,17 +931,20 @@ const handleDragStart = (event: MouseEvent, item: any, index: number) => {
   handleDragMove(event)
   document.addEventListener('mousemove', handleDragMove)
   document.addEventListener('mouseup', handleDragEnd)
+  document.addEventListener('touchmove', handleDragMove, { passive: false })
+  document.addEventListener('touchend', handleDragEnd)
 }
 
-const handleDragEnd = (event: MouseEvent) => {
+
+const handleDragEnd = (event: MouseEvent | TouchEvent) => {
   if (!draggingItem.value || !calendarContent.value) return
+  event.preventDefault()
 
   if (dragGhost.value) {
     dragGhost.value.remove()
     dragGhost.value = null
   }
 
-  // USE selectedIndex THAT WAS ALREADY CALCULATED DURING DRAG
   let targetDayIndex = selectedIndex.value
   
   if (targetDayIndex === -1) {
@@ -940,10 +961,6 @@ const handleDragEnd = (event: MouseEvent) => {
   }
 
   const originalItem = draggingItem.value.item
-  const startDt = DateTime.fromJSDate(originalItem.start)
-  const endDt = DateTime.fromJSDate(originalItem.end)
-
-  // STORE THE ORIGINAL DURATION
   const originalDurationMs = originalItem.end.getTime() - originalItem.start.getTime()
 
   const totalHours = props.endHour - props.startHour
@@ -951,7 +968,9 @@ const handleDragEnd = (event: MouseEvent) => {
     dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
 
   const calendarRect = calendarContent.value.getBoundingClientRect()
-  const dropY = event.clientY - calendarRect.top + calendarContent.value.scrollTop
+  const clientY = 'changedTouches' in event ? event.changedTouches[0].clientY : event.clientY
+
+  const dropY = clientY - calendarRect.top + calendarContent.value.scrollTop
   const adjustedDropY = dropY - topPadding.value
   const pixelsPerMinute = contentHeight / (totalHours * 60)
   const offsetMinutes = adjustedDropY / pixelsPerMinute
@@ -985,46 +1004,44 @@ const handleDragEnd = (event: MouseEvent) => {
       millisecond: 0
     })
   }
-const newStart = newStartDt.toJSDate()
-const newEnd = new Date(newStart.getTime() + originalDurationMs)
 
-const startOfDay = new Date(originalItem.start)
-startOfDay.setHours(0, 0, 0, 0)
-const endOfDay = new Date(originalItem.end)
-endOfDay.setHours(0, 0, 0, 0)
+  const newStart = newStartDt.toJSDate()
+  const newEnd = new Date(newStart.getTime() + originalDurationMs)
 
-const timeOnlyDurationMs =
-  originalItem.end.getTime() -
-  endOfDay.getTime() -
-  (originalItem.start.getTime() - startOfDay.getTime())
+  const startOfDay = new Date(originalItem.start)
+  startOfDay.setHours(0, 0, 0, 0)
+  const endOfDay = new Date(originalItem.end)
+  endOfDay.setHours(0, 0, 0, 0)
 
-// Calculate half duration in milliseconds
-const halfDurationMs = timeOnlyDurationMs / 2
-console.log('duration:',halfDurationMs/60000)
+  const timeOnlyDurationMs =
+    originalItem.end.getTime() -
+    endOfDay.getTime() -
+    (originalItem.start.getTime() - startOfDay.getTime())
 
-// Subtract half duration from both start and end
-const adjustedStart = new Date(newStart.getTime() - halfDurationMs)
-const adjustedEnd = new Date(newEnd.getTime() - halfDurationMs)
+  const halfDurationMs = timeOnlyDurationMs / 2
 
-const originalIndex = draggingItem.value.originalIndex
+  const adjustedStart = new Date(newStart.getTime() - halfDurationMs)
+  const adjustedEnd = new Date(newEnd.getTime() - halfDurationMs)
 
-if (draggedElement.value) {
-  draggedElement.value.classList.add('no-transition')
-  draggedElement.value.classList.remove('dragging')
-}
+  const originalIndex = draggingItem.value.originalIndex
 
-const updatedItems = props.modelValue.map((item, idx) => {
-  if (idx === originalIndex) {
-    return {
-      ...item,
-      start: adjustedStart,
-      end: adjustedEnd
-    }
+  if (draggedElement.value) {
+    draggedElement.value.classList.add('no-transition')
+    draggedElement.value.classList.remove('dragging')
   }
-  return item
-})
 
-emit('update:modelValue', updatedItems)
+  const updatedItems = props.modelValue.map((item, idx) => {
+    if (idx === originalIndex) {
+      return {
+        ...item,
+        start: adjustedStart,
+        end: adjustedEnd
+      }
+    }
+    return item
+  })
+
+  emit('update:modelValue', updatedItems)
 
   setTimeout(() => {
     if (draggedElement.value) {
@@ -1035,19 +1052,21 @@ emit('update:modelValue', updatedItems)
   resetDrag()
 }
 
- const resetDrag = () => {
+const resetDrag = () => {
   draggingItem.value = null
   draggedElement.value = null
   dragStartX.value = 0
   dragStartY.value = 0
-  selectedIndex.value =-1
+  selectedIndex.value = -1
   selectedItemIndex.value = null
 
   document.removeEventListener('mousemove', handleDragMove)
   document.removeEventListener('mouseup', handleDragEnd)
+  document.removeEventListener('touchmove', handleDragMove)
+  document.removeEventListener('touchend', handleDragEnd)
 }
 
-const handleItemClick = (event: MouseEvent, index: number) => {
+const handleItemClick = (event: Event, index: number) => {
   if (!props.editable) return
   event.stopPropagation()
   selectedItemIndex.value = index
@@ -1069,7 +1088,7 @@ const horizontalResizingItem = ref<{
 const initialX = ref(0)
 
 const handleHorizontalResizeStart = (
-  event: MouseEvent,
+  event: MouseEvent | TouchEvent,
   item: any,
   handle: 'left' | 'right'
 ) => {
@@ -1082,7 +1101,7 @@ const handleHorizontalResizeStart = (
   if (originalIndex === -1) return
 
   horizontalResizingItem.value = { item, handle, originalIndex }
-  initialX.value = event.clientX
+  initialX.value = 'touches' in event ? event.touches[0].clientX : event.clientX
   initialStart.value = new Date(item.start)
   initialEnd.value = new Date(item.end)
 
@@ -1091,12 +1110,14 @@ const handleHorizontalResizeStart = (
 
   document.addEventListener('mousemove', handleHorizontalResizing)
   document.addEventListener('mouseup', handleHorizontalResizeEnd)
+  document.addEventListener('touchmove', handleHorizontalResizing)
+  document.addEventListener('touchend', handleHorizontalResizeEnd)
 }
 
-const handleHorizontalResizing = (event: MouseEvent) => {
+const handleHorizontalResizing = (event: MouseEvent | TouchEvent) => {
   if (!horizontalResizingItem.value || !calendarContent.value || !props.editable) return
-
-  const deltaX = event.clientX - initialX.value
+  const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX
+  const deltaX = clientX - initialX.value
   const dayWidthPixels = calendarContent.value.scrollWidth / monthDays.value.length
   const deltaDays = Math.round(deltaX / dayWidthPixels)
 
@@ -1142,6 +1163,8 @@ const handleHorizontalResizeEnd = () => {
 
   document.removeEventListener('mousemove', handleHorizontalResizing)
   document.removeEventListener('mouseup', handleHorizontalResizeEnd)
+  document.removeEventListener('touchmove', handleHorizontalResizing)
+  document.removeEventListener('touchend', handleHorizontalResizeEnd)
 }
 
   return {
@@ -1450,5 +1473,14 @@ const handleHorizontalResizeEnd = () => {
 
 .resize-handle-bottom {
   bottom: 0;
+}
+
+.scroll-disabled {
+  overflow: hidden !important;
+  pointer-events: none;
+}
+
+.scroll-disabled * {
+  pointer-events: auto;
 }
 </style>
