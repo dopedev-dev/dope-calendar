@@ -894,6 +894,8 @@ const handleDragStart = (event: MouseEvent, item: any, index: number) => {
 
 
 
+
+
 const handleDragEnd = (event: MouseEvent) => {
   if (!draggingItem.value || !calendarContent.value) return
 
@@ -902,21 +904,14 @@ const handleDragEnd = (event: MouseEvent) => {
     dragGhost.value = null
   }
 
-  const calendarRect = calendarContent.value.getBoundingClientRect()
-  const dropX = event.clientX - calendarRect.left + calendarContent.value.scrollLeft
-  const dropY = event.clientY - calendarRect.top + calendarContent.value.scrollTop
-
-  const calendarWidth = calendarContent.value.scrollWidth
-  const dayWidth = calendarWidth / monthDays.value.length
-
-  const processedItem = processedItems.value[draggingItem.value.originalIndex]
-  if (!processedItem) {
+  // USE selectedIndex THAT WAS ALREADY CALCULATED DURING DRAG
+  let targetDayIndex = selectedIndex.value
+  
+  if (targetDayIndex === -1) {
     resetDrag()
     return
   }
 
-  const itemCenterOffset = (processedItem.daySpan * dayWidth) / 2
-  let targetDayIndex = Math.round((dropX + itemCenterOffset) / dayWidth) - Math.ceil(processedItem.daySpan / 2)
   targetDayIndex = Math.max(0, Math.min(targetDayIndex, monthDays.value.length - 1))
 
   const targetDayData = monthDays.value[targetDayIndex]
@@ -936,11 +931,12 @@ const handleDragEnd = (event: MouseEvent) => {
   const contentHeight =
     dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
 
+  const calendarRect = calendarContent.value.getBoundingClientRect()
+  const dropY = event.clientY - calendarRect.top + calendarContent.value.scrollTop
   const adjustedDropY = dropY - topPadding.value
   const pixelsPerMinute = contentHeight / (totalHours * 60)
   const offsetMinutes = adjustedDropY / pixelsPerMinute
   const clampedMinutes = Math.max(0, Math.min(offsetMinutes, totalHours * 60))
-
   const adjustedHourOffset = Math.floor(clampedMinutes / 60)
   const adjustedMinuteOffset = Math.round(clampedMinutes % 60)
 
@@ -970,60 +966,39 @@ const handleDragEnd = (event: MouseEvent) => {
       millisecond: 0
     })
   }
-
-  const newStart = newStartDt.toJSDate()
-  // ADD THE ORIGINAL DURATION TO THE NEW START TIME
-  const newEnd = new Date(newStart.getTime() + originalDurationMs)
-
-  const releasedTop = `${topPadding.value + adjustedDropY}px`
-  const releasedLeft = `${targetDayIndex * (100 / monthDays.value.length)}%`
+const halfDuration = originalDurationMs / 2
+const newStart = new Date(newStartDt.toJSDate().getTime() - halfDuration)
+const newEnd = new Date(newStart.getTime() + originalDurationMs)
 
   const originalIndex = draggingItem.value.originalIndex
-
-  overriddenItemIndex.value = originalIndex
-  overriddenItemStyle.value = {
-    top: releasedTop,
-    left: releasedLeft
-  }
 
   if (draggedElement.value) {
     draggedElement.value.classList.add('no-transition')
     draggedElement.value.classList.remove('dragging')
   }
 
+  const updatedItems = props.modelValue.map((item, idx) => {
+    if (idx === originalIndex) {
+      return {
+        ...item,
+        start: newStart,
+        end: newEnd
+      }
+    }
+    return item
+  })
+
+  emit('update:modelValue', updatedItems)
+
   setTimeout(() => {
     if (draggedElement.value) {
       draggedElement.value.classList.remove('no-transition')
-      draggedElement.value.classList.add('transition-to-final')
     }
-
-    setTimeout(() => {
-      overriddenItemIndex.value = null
-      overriddenItemStyle.value = null
-
-      const updatedItems = props.modelValue.map((item, idx) => {
-        if (idx === originalIndex) {
-          return {
-            ...item,
-            start: newStart,
-            end: newEnd
-          }
-        }
-        return item
-      })
-
-      emit('update:modelValue', updatedItems)
-    }, 10)
-  }, 0)
-
-  setTimeout(() => {
-    if (draggedElement.value) {
-      draggedElement.value.classList.remove('transition-to-final')
-    }
-  }, 300)
+  }, 50)
 
   resetDrag()
 }
+
  const resetDrag = () => {
   draggingItem.value = null
   draggedElement.value = null
