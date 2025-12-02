@@ -1,6 +1,6 @@
 <template>
   <div :dir="dir" ref="calendar" class="calendar-wrapper  dope-calendar-grid">
-    <div class="header-container">
+    <div @click="deselectItems" @mousedown.stop="deselectItems" class="header-container">
       <div class="header-padding"></div>
       <div ref="calendarHeader" @scroll="handleHeaderScroll" class="calendar-header hide-scrollbar">
          <div v-for="(day, index) in monthDays" :key="index" 
@@ -153,6 +153,10 @@ export default defineComponent({
     maxZoom: {
       type: Number,
       default: 5,
+    },
+    speed:{
+      type: Number,
+      default: 20,
     },
     jalaali: {
       type: Boolean,
@@ -862,6 +866,8 @@ const selectedIndex = ref(-1)
 const overriddenItemIndex = ref<number | null>(null)
 const overriddenItemStyle = ref<{ top: string; left: string } | null>(null)
 
+const autoScrollInterval = ref<number | null>(null)
+
 
 const handleDragMove = (event: MouseEvent | TouchEvent) => {
   if (!draggingItem.value || !dragGhost.value || !calendarContent.value) return
@@ -870,7 +876,11 @@ const handleDragMove = (event: MouseEvent | TouchEvent) => {
   const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX
   const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY
 
-  const calendarRect = calendarContent.value.getBoundingClientRect()
+  const calendarRect = calendar.value?.getBoundingClientRect()
+  const contentContainerRect = contentContainer.value?.getBoundingClientRect()
+  
+  if (!calendarRect || !contentContainerRect) return
+
   const calendarWidth = calendarContent.value.scrollWidth
   const dayWidth = calendarWidth / monthDays.value.length
 
@@ -893,8 +903,79 @@ const handleDragMove = (event: MouseEvent | TouchEvent) => {
 
   dragGhost.value.style.left = `${clientX - dragGhost.value.offsetWidth / 2}px`
   dragGhost.value.style.top = `${clientY - dragGhost.value.offsetHeight / 2}px`
-}
 
+  // Auto-scroll logic based on mouse/touch position relative to calendar.value
+  const scrollThreshold = 30
+  const scrollSpeed = props.speed
+
+  // Clear existing interval
+  if (autoScrollInterval.value !== null) {
+    clearInterval(autoScrollInterval.value)
+    autoScrollInterval.value = null
+  }
+
+  let shouldScroll = false
+  let scrollLeft = false
+  let scrollRight = false
+  let scrollUp = false
+  let scrollDown = false
+
+  // Check horizontal edges (using calendar.value for left/right)
+  if (props.dir === 'rtl') {
+    // RTL: right edge is the start, left edge is the end
+    if (calendarRect.right - clientX < scrollThreshold) {
+      scrollLeft = true
+      shouldScroll = true
+    } else if (clientX - calendarRect.left < scrollThreshold) {
+      scrollRight = true
+      shouldScroll = true
+    }
+  } else {
+    // LTR: left edge is the start, right edge is the end
+    if (clientX - calendarRect.left < scrollThreshold) {
+      scrollLeft = true
+      shouldScroll = true
+    } else if (calendarRect.right - clientX < scrollThreshold) {
+      scrollRight = true
+      shouldScroll = true
+    }
+  }
+
+  // Check vertical edges (using contentContainer for top/bottom)
+  if (clientY - contentContainerRect.top < scrollThreshold) {
+    scrollUp = true
+    shouldScroll = true
+  } else if (contentContainerRect.bottom - clientY < scrollThreshold) {
+    scrollDown = true
+    shouldScroll = true
+  }
+
+  // Start continuous scrolling if near edges
+  if (shouldScroll) {
+    autoScrollInterval.value = window.setInterval(() => {
+      if (!calendarContent.value || !contentContainer.value) return
+
+      if (scrollLeft) {
+        const newScrollLeft = calendarContent.value.scrollLeft - scrollSpeed
+        calendarContent.value.scrollLeft = Math.max(0, newScrollLeft)
+      }
+      if (scrollRight) {
+        const maxScrollLeft = calendarContent.value.scrollWidth - calendarContent.value.clientWidth
+        const newScrollLeft = calendarContent.value.scrollLeft + scrollSpeed
+        calendarContent.value.scrollLeft = Math.min(maxScrollLeft, newScrollLeft)
+      }
+      if (scrollUp) {
+        const newScrollTop = contentContainer.value.scrollTop - scrollSpeed
+        contentContainer.value.scrollTop = Math.max(0, newScrollTop)
+      }
+      if (scrollDown) {
+        const maxScrollTop = contentContainer.value.scrollHeight - contentContainer.value.clientHeight
+        const newScrollTop = contentContainer.value.scrollTop + scrollSpeed
+        contentContainer.value.scrollTop = Math.min(maxScrollTop, newScrollTop)
+      }
+    }, 16) // ~60fps for smooth scrolling
+  }
+}
 
 const handleDragStart = (event: MouseEvent | TouchEvent, item: any, index: number) => {
   if (!props.editable) return
@@ -939,6 +1020,12 @@ const handleDragStart = (event: MouseEvent | TouchEvent, item: any, index: numbe
 const handleDragEnd = (event: MouseEvent | TouchEvent) => {
   if (!draggingItem.value || !calendarContent.value) return
   event.preventDefault()
+
+  // Clear auto-scroll interval
+  if (autoScrollInterval.value !== null) {
+    clearInterval(autoScrollInterval.value)
+    autoScrollInterval.value = null
+  }
 
   if (dragGhost.value) {
     dragGhost.value.remove()
@@ -1052,6 +1139,7 @@ const handleDragEnd = (event: MouseEvent | TouchEvent) => {
   resetDrag()
 }
 
+
 const resetDrag = () => {
   draggingItem.value = null
   draggedElement.value = null
@@ -1060,12 +1148,17 @@ const resetDrag = () => {
   selectedIndex.value = -1
   selectedItemIndex.value = null
 
+  // Clear auto-scroll interval
+  if (autoScrollInterval.value !== null) {
+    clearInterval(autoScrollInterval.value)
+    autoScrollInterval.value = null
+  }
+
   document.removeEventListener('mousemove', handleDragMove)
   document.removeEventListener('mouseup', handleDragEnd)
   document.removeEventListener('touchmove', handleDragMove)
   document.removeEventListener('touchend', handleDragEnd)
 }
-
 const handleItemClick = (event: Event, index: number) => {
   if (!props.editable) return
   event.stopPropagation()
@@ -1078,6 +1171,10 @@ const handleCalendarClick = (event: MouseEvent) => {
   if (!target.closest('.calendar-item-wrapper')) {
     selectedItemIndex.value = null
   }
+}
+
+const deselectItems  = ()=>{
+  selectedItemIndex.value = null
 }
 
 const horizontalResizingItem = ref<{
@@ -1199,6 +1296,7 @@ const handleHorizontalResizeEnd = () => {
   handleHorizontalResizeStart,
   handleHorizontalResizing,
   handleHorizontalResizeEnd,
+  deselectItems,
 }
   },
 })
