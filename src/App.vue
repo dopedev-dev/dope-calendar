@@ -5,7 +5,7 @@
       :jalaali="true"
       mode="month"
       dir="ltr"
-      lang="fa"
+      lang="en"
       editable
       :holidays="holidays"
       v-model="calendarItems"
@@ -26,6 +26,7 @@
 import { ref } from 'vue'
 import CalendarGrid from './components/CalendarGrid.vue'
 const today = new Date()
+
 const calendarItems = ref(
 [
   {
@@ -106,8 +107,10 @@ const holidays = ref([
 ])
 </script>
 <style scoped>
+
 .custom-calendar-item{
   width: 100%;
   height: 100%;
 }
+
 </style>

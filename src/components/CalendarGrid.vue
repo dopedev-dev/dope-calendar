@@ -78,7 +78,26 @@
                     </div>
                   </div> -->
                 </slot>
-
+                 <div
+              v-if="selectedItemIndex === index"
+              class="resize-handle-left"
+              @mousedown.stop="handleHorizontalResizeStart($event, item, 'left')"
+            ></div>
+              <div
+              v-if="editable"
+              class="resize-handle-horizontal left"
+              @mousedown.stop="handleHorizontalResizeStart($event, item, 'left')"
+            ></div>
+            <div
+              v-if="editable"
+              class="resize-handle-horizontal right"
+              @mousedown.stop="handleHorizontalResizeStart($event, item, 'right')"
+            ></div>
+            <div
+              v-if="selectedItemIndex === index"
+              class="resize-handle-right"
+              @mousedown.stop="handleHorizontalResizeStart($event, item, 'right')"
+            ></div>
                 <div class="resize-handle-bottom" @mousedown.stop="handleResizeStart($event, item, 'bottom')"></div>
               </div>
             </div>
@@ -613,11 +632,11 @@ const handleZoomStart = (event: MouseEvent | TouchEvent) => {
       }
     })
 
+
 const processedItems = computed(() => {
-  const dayWidth = 100 / monthDays.value.length
+  const dayWidthPercent = 100 / monthDays.value.length
   const totalHours = props.endHour - props.startHour
 
-  // The total height of the scrollable content area for items.
   const contentHeight =
     dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
 
@@ -626,59 +645,75 @@ const processedItems = computed(() => {
       const startDt = DateTime.fromJSDate(item.start)
       const endDt = DateTime.fromJSDate(item.end)
 
-      const dayIndex = monthDays.value.findIndex((day) => {
+      // Find the starting day index
+      const startDayIndex = monthDays.value.findIndex((day) => {
         const dayDt = props.jalaali
           ? DateTime.fromObject(
-              { day: day.day, month: startDt.month, year: startDt.year },
+              { day: day.day, month: day.month, year: day.year },
               { zone: 'local', numberingSystem: 'latn', outputCalendar: 'persian' }
             )
           : DateTime.fromObject({
               day: day.day,
-              month: startDt.month,
-              year: startDt.year
+              month: day.month,
+              year: day.year
             })
 
         return dayDt.hasSame(startDt, 'day')
       })
 
-      if (dayIndex === -1) {
+
+      if (startDayIndex === -1) {
         return null // Item is not in the visible range
       }
 
+      // Create tempDate: end date but at the same day as start date
+      const tempDate = endDt.set({ year: startDt.year, month: startDt.month, day: startDt.day })
+
+      // Calculate height based on time difference within the same day
+      const itemDuration = tempDate.diff(startDt, 'minutes').minutes
+
+      // Check if event spans multiple days
+      const isSameDay = startDt.hasSame(endDt, 'day')
+
+      // Calculate the number of days the event spans
+      let daySpan = 1
+      if (!isSameDay) {
+        // Calculate exact day span from start to end
+        const dayDiff = endDt.diff(startDt, 'days').days
+        daySpan = Math.floor(dayDiff) + 1
+      }
+
+      // Calculate time offset within the start day
       const startOfDay = startDt.startOf('day').plus({ hours: props.startHour })
       const itemStartOffset = startDt.diff(startOfDay, 'minutes').minutes
-      const itemDuration = endDt.diff(startDt, 'minutes').minutes
 
       const topOffset = (itemStartOffset / (totalHours * 60)) * contentHeight
       const height = (itemDuration / (totalHours * 60)) * contentHeight
-      const left = dayIndex * dayWidth
-      const width = dayWidth
+      const left = startDayIndex * dayWidthPercent
 
-      // Use overridden style if this item is being transitioned
-      const style = overriddenItemIndex.value === index && overriddenItemStyle.value
-        ? {
-            top: overriddenItemStyle.value.top,
-            left: overriddenItemStyle.value.left,
-            height: `${height}px`,
-            width: `${width}%`,
-            position: 'absolute'
-          }
-        : {
-            top: `calc(${topPadding.value}px + ${topOffset}px)`,
-            left: `${left}%`,
-            height: `${height}px`,
-            width: `${width}%`,
-            position: 'absolute'
-          }
+      // Width spans multiple days based on daySpan
+      const width = daySpan * dayWidthPercent
+
+      const style = {
+        top: `calc(${topPadding.value}px + ${topOffset}px)`,
+        left: `${left}%`,
+        height: `${height}px`,
+        width: `${width}%`,
+        position: 'absolute'
+      }
 
       return {
         ...item,
         id: `item-${index}`,
-        style
+        style,
+        startDayIndex,
+        daySpan,
+        itemDuration
       }
     })
     .filter((item) => item !== null)
 })
+
    const processedHolidays = computed(() => {
   return new Set(
     props.holidays.map(d => {
@@ -731,43 +766,44 @@ const handleResizeStart = (event: MouseEvent, item: any, handle: 'top' | 'bottom
       document.addEventListener('mouseup', handleResizeEnd)
   }
 
-  const handleResizing = (event: MouseEvent) => {
-      if (!resizingItem.value || !calendarContent.value || !props.editable) return
+const handleResizing = (event: MouseEvent) => {
+  if (!resizingItem.value || !calendarContent.value || !props.editable) return
 
-      const deltaY = event.clientY - initialY.value
-      const calendarRect = calendarContent.value.getBoundingClientRect()
-      const calendarHeight = calendarRect.height
-      const totalMinutes = (props.endHour - props.startHour) * 60
-      const minutesPerPixel = totalMinutes / calendarHeight
+  const deltaY = event.clientY - initialY.value
+  const calendarRect = calendarContent.value.getBoundingClientRect()
+  const calendarHeight = calendarRect.height
+  const totalMinutes = (props.endHour - props.startHour) * 60
+  const minutesPerPixel = totalMinutes / calendarHeight
 
-      const deltaMinutes = deltaY * minutesPerPixel
+  const deltaMinutes = deltaY * minutesPerPixel
 
-      const { handle, originalIndex } = resizingItem.value
-      
-      if (originalIndex === -1 || !initialStart.value || !initialEnd.value) return
+  const { handle, originalIndex } = resizingItem.value
+  
+  if (originalIndex === -1 || !initialStart.value || !initialEnd.value) return
 
-      const newItems = props.modelValue.map((item) => ({
-        ...item,
-        start: new Date(item.start),
-        end: new Date(item.end)
-      }))
+  const newItems = props.modelValue.map((item) => ({
+    ...item,
+    start: new Date(item.start),
+    end: new Date(item.end)
+  }))
 
-      const itemToUpdate = newItems[originalIndex]
+  const itemToUpdate = newItems[originalIndex]
 
-      if (handle === 'top') {
-        const newStart = new Date(initialStart.value.getTime() + deltaMinutes * 60000)
-        if (newStart.getTime() < itemToUpdate.end.getTime() - 5 * 60000) {
-          itemToUpdate.start = newStart
-        }
-      } else {
-        const newEnd = new Date(initialEnd.value.getTime() + deltaMinutes * 60000)
-        if (newEnd.getTime() > itemToUpdate.start.getTime() + 5 * 60000) {
-          itemToUpdate.end = newEnd
-        }
-      }
-
-      emit('update:modelValue', newItems)
+  if (handle === 'top') {
+    const newStart = new Date(initialStart.value.getTime() + deltaMinutes * 60000)
+    if (newStart.getTime() < itemToUpdate.end.getTime() - 5 * 60000) {
+      itemToUpdate.start = newStart
+    }
+  } else {
+    const newEnd = new Date(initialEnd.value.getTime() + deltaMinutes * 60000)
+    if (newEnd.getTime() > itemToUpdate.start.getTime() + 5 * 60000) {
+      itemToUpdate.end = newEnd
+    }
   }
+
+  emit('update:modelValue', newItems)
+}
+
 
   const handleResizeEnd = () => {
       resizingItem.value = null
@@ -823,7 +859,9 @@ const handleDragStart = (event: MouseEvent, item: any, index: number) => {
     return
   }
 
-  draggingItem.value = { item, originalIndex: index }
+  // Use the original item from modelValue, not the processed item
+  const originalItem = props.modelValue[index]
+  draggingItem.value = { item: originalItem, originalIndex: index }
   draggedElement.value = event.currentTarget as HTMLElement
   dragStartX.value = event.clientX
   dragStartY.value = event.clientY
@@ -852,6 +890,10 @@ const handleDragStart = (event: MouseEvent, item: any, index: number) => {
 
 
 
+
+
+
+
 const handleDragEnd = (event: MouseEvent) => {
   if (!draggingItem.value || !calendarContent.value) return
 
@@ -867,7 +909,14 @@ const handleDragEnd = (event: MouseEvent) => {
   const calendarWidth = calendarContent.value.scrollWidth
   const dayWidth = calendarWidth / monthDays.value.length
 
-  let targetDayIndex = Math.floor(dropX / dayWidth)
+  const processedItem = processedItems.value[draggingItem.value.originalIndex]
+  if (!processedItem) {
+    resetDrag()
+    return
+  }
+
+  const itemCenterOffset = (processedItem.daySpan * dayWidth) / 2
+  let targetDayIndex = Math.round((dropX + itemCenterOffset) / dayWidth) - Math.ceil(processedItem.daySpan / 2)
   targetDayIndex = Math.max(0, Math.min(targetDayIndex, monthDays.value.length - 1))
 
   const targetDayData = monthDays.value[targetDayIndex]
@@ -877,27 +926,26 @@ const handleDragEnd = (event: MouseEvent) => {
   }
 
   const originalItem = draggingItem.value.item
-  const itemDuration = originalItem.end.getTime() - originalItem.start.getTime()
+  const startDt = DateTime.fromJSDate(originalItem.start)
+  const endDt = DateTime.fromJSDate(originalItem.end)
+
+  // STORE THE ORIGINAL DURATION
+  const originalDurationMs = originalItem.end.getTime() - originalItem.start.getTime()
 
   const totalHours = props.endHour - props.startHour
   const contentHeight =
     dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
-  
+
   const adjustedDropY = dropY - topPadding.value
-  
   const pixelsPerMinute = contentHeight / (totalHours * 60)
   const offsetMinutes = adjustedDropY / pixelsPerMinute
-  
   const clampedMinutes = Math.max(0, Math.min(offsetMinutes, totalHours * 60))
-  
-  const itemDurationMinutes = itemDuration / 60000
-  const halfDurationMinutes = itemDurationMinutes / 2
-  const adjustedMinutes = clampedMinutes - halfDurationMinutes
-  const adjustedHourOffset = Math.floor(adjustedMinutes / 60)
-  const adjustedMinuteOffset = Math.round(adjustedMinutes % 60)
-  
+
+  const adjustedHourOffset = Math.floor(clampedMinutes / 60)
+  const adjustedMinuteOffset = Math.round(clampedMinutes % 60)
+
   let newStartDt: DateTime
-  
+
   if (props.jalaali) {
     newStartDt = DateTime.fromObject(
       {
@@ -924,14 +972,14 @@ const handleDragEnd = (event: MouseEvent) => {
   }
 
   const newStart = newStartDt.toJSDate()
-  const newEnd = new Date(newStart.getTime() + itemDuration)
+  // ADD THE ORIGINAL DURATION TO THE NEW START TIME
+  const newEnd = new Date(newStart.getTime() + originalDurationMs)
 
   const releasedTop = `${topPadding.value + adjustedDropY}px`
   const releasedLeft = `${targetDayIndex * (100 / monthDays.value.length)}%`
-  
+
   const originalIndex = draggingItem.value.originalIndex
-  
-  // Phase 1: Set override to released position (no transition)
+
   overriddenItemIndex.value = originalIndex
   overriddenItemStyle.value = {
     top: releasedTop,
@@ -943,19 +991,16 @@ const handleDragEnd = (event: MouseEvent) => {
     draggedElement.value.classList.remove('dragging')
   }
 
-  // Phase 2: Enable transition BEFORE updating model
   setTimeout(() => {
     if (draggedElement.value) {
       draggedElement.value.classList.remove('no-transition')
       draggedElement.value.classList.add('transition-to-final')
     }
-    
-    // Phase 3: Clear override to trigger transition to final position
+
     setTimeout(() => {
       overriddenItemIndex.value = null
       overriddenItemStyle.value = null
-      
-      // Phase 4: NOW update the model after override is cleared
+
       const updatedItems = props.modelValue.map((item, idx) => {
         if (idx === originalIndex) {
           return {
@@ -971,7 +1016,6 @@ const handleDragEnd = (event: MouseEvent) => {
     }, 10)
   }, 0)
 
-  // Remove transition class after animation completes
   setTimeout(() => {
     if (draggedElement.value) {
       draggedElement.value.classList.remove('transition-to-final')
@@ -980,14 +1024,12 @@ const handleDragEnd = (event: MouseEvent) => {
 
   resetDrag()
 }
-
-
  const resetDrag = () => {
   draggingItem.value = null
   draggedElement.value = null
   dragStartX.value = 0
   dragStartY.value = 0
-  selectedIndex.value = -1
+  selectedIndex.value =-1
   selectedItemIndex.value = null
 
   document.removeEventListener('mousemove', handleDragMove)
@@ -1006,6 +1048,89 @@ const handleCalendarClick = (event: MouseEvent) => {
   if (!target.closest('.calendar-item-wrapper')) {
     selectedItemIndex.value = null
   }
+}
+
+const horizontalResizingItem = ref<{
+  item: any
+  handle: 'left' | 'right'
+  originalIndex: number
+} | null>(null)
+const initialX = ref(0)
+
+const handleHorizontalResizeStart = (
+  event: MouseEvent,
+  item: any,
+  handle: 'left' | 'right'
+) => {
+  if (!props.editable) return
+
+  const originalIndex = props.modelValue.findIndex(
+    (i) => i.start.getTime() === item.start.getTime() && i.end.getTime() === item.end.getTime()
+  )
+
+  if (originalIndex === -1) return
+
+  horizontalResizingItem.value = { item, handle, originalIndex }
+  initialX.value = event.clientX
+  initialStart.value = new Date(item.start)
+  initialEnd.value = new Date(item.end)
+
+  const allItems = document.querySelectorAll('.calendar-item-wrapper')
+  allItems.forEach((el) => el.classList.add('no-transition'))
+
+  document.addEventListener('mousemove', handleHorizontalResizing)
+  document.addEventListener('mouseup', handleHorizontalResizeEnd)
+}
+
+const handleHorizontalResizing = (event: MouseEvent) => {
+  if (!horizontalResizingItem.value || !calendarContent.value || !props.editable) return
+
+  const deltaX = event.clientX - initialX.value
+  const dayWidthPixels = calendarContent.value.scrollWidth / monthDays.value.length
+  const deltaDays = Math.round(deltaX / dayWidthPixels)
+
+  const { handle, originalIndex } = horizontalResizingItem.value
+
+  if (originalIndex === -1 || !initialStart.value || !initialEnd.value) return
+
+  const newItems = props.modelValue.map((item) => ({
+    ...item,
+    start: new Date(item.start),
+    end: new Date(item.end)
+  }))
+
+  const itemToUpdate = newItems[originalIndex]
+  const originalStart = DateTime.fromJSDate(initialStart.value)
+  const originalEnd = DateTime.fromJSDate(initialEnd.value)
+
+  if (handle === 'left') {
+    const newStart = originalStart.plus({ days: deltaDays }).toJSDate()
+    // Ensure start doesn't go past end
+    if (newStart.getTime() < itemToUpdate.end.getTime()) {
+      itemToUpdate.start = newStart
+    }
+  } else {
+    const newEnd = originalEnd.plus({ days: deltaDays }).toJSDate()
+    // Ensure end doesn't go before start
+    if (newEnd.getTime() > itemToUpdate.start.getTime()) {
+      itemToUpdate.end = newEnd
+    }
+  }
+
+  emit('update:modelValue', newItems)
+}
+
+
+const handleHorizontalResizeEnd = () => {
+  horizontalResizingItem.value = null
+  initialStart.value = null
+  initialEnd.value = null
+
+  const allItems = document.querySelectorAll('.calendar-item-wrapper')
+  allItems.forEach((el) => el.classList.remove('no-transition'))
+
+  document.removeEventListener('mousemove', handleHorizontalResizing)
+  document.removeEventListener('mouseup', handleHorizontalResizeEnd)
 }
 
   return {
@@ -1035,6 +1160,11 @@ const handleCalendarClick = (event: MouseEvent) => {
   handleCalendarClick,
   overriddenItemIndex,
   overriddenItemStyle,
+
+  // resizing horizontally:
+  handleHorizontalResizeStart,
+  handleHorizontalResizing,
+  handleHorizontalResizeEnd,
 }
   },
 })
@@ -1153,6 +1283,24 @@ const handleCalendarClick = (event: MouseEvent) => {
   border-right: none;
 }
 
+.resize-handle-horizontal {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  z-index: 10;
+}
+
+
+.resize-handle-horizontal.left {
+  left: 0;
+  cursor: ew-resize;
+}
+
+.resize-handle-horizontal.right {
+  right: 0;
+  cursor: ew-resize;
+}
 .hour-label {
   color: var(--dc-day-number-color);
   font-size: var(--dc-day-number-font-size);
