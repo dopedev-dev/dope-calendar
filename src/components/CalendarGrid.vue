@@ -139,7 +139,7 @@ export default defineComponent({
     },
     minTime:{
       type:Number,
-      default:30,
+      default:1,
     },
     zoom: {
       type: Boolean,
