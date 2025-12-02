@@ -1,5 +1,5 @@
 <template>
-  <div class="h-dvh w-dvw">
+  <!-- <div class="h-dvh w-dvw">
     <CalendarGrid
       :georgian="false"
       :jalaali="true"
@@ -20,13 +20,14 @@
         </div>
       </template>
     </CalendarGrid>
-  </div>
+  </div> -->
+<DatePicker v-model="today"/>
 </template>
 <script setup lang="ts">
 import { ref } from 'vue'
 import CalendarGrid from './components/CalendarGrid.vue'
 const today = new Date()
-
+import DatePicker from './components/DatePicker.vue'
 const calendarItems = ref(
 [
   {
