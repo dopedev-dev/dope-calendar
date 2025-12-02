@@ -137,6 +137,10 @@ export default defineComponent({
       type: Boolean,
       default: false
     },
+    minTime:{
+      type:Number,
+      default:30,
+    },
     zoom: {
       type: Boolean,
       default: true,
@@ -766,6 +770,7 @@ const handleResizeStart = (event: MouseEvent, item: any, handle: 'top' | 'bottom
       document.addEventListener('mouseup', handleResizeEnd)
   }
 
+
 const handleResizing = (event: MouseEvent) => {
   if (!resizingItem.value || !calendarContent.value || !props.editable) return
 
@@ -777,8 +782,11 @@ const handleResizing = (event: MouseEvent) => {
 
   const deltaMinutes = deltaY * minutesPerPixel
 
+  // Step the delta to minTime increments
+  const steppedDeltaMinutes = Math.round(deltaMinutes / props.minTime) * props.minTime
+
   const { handle, originalIndex } = resizingItem.value
-  
+
   if (originalIndex === -1 || !initialStart.value || !initialEnd.value) return
 
   const newItems = props.modelValue.map((item) => ({
@@ -788,15 +796,16 @@ const handleResizing = (event: MouseEvent) => {
   }))
 
   const itemToUpdate = newItems[originalIndex]
+  const minDurationMs = props.minTime * 60000 // Convert minTime (in minutes) to milliseconds
 
   if (handle === 'top') {
-    const newStart = new Date(initialStart.value.getTime() + deltaMinutes * 60000)
-    if (newStart.getTime() < itemToUpdate.end.getTime() - 5 * 60000) {
+    const newStart = new Date(initialStart.value.getTime() + steppedDeltaMinutes * 60000)
+    if (newStart.getTime() < itemToUpdate.end.getTime() - minDurationMs) {
       itemToUpdate.start = newStart
     }
   } else {
-    const newEnd = new Date(initialEnd.value.getTime() + deltaMinutes * 60000)
-    if (newEnd.getTime() > itemToUpdate.start.getTime() + 5 * 60000) {
+    const newEnd = new Date(initialEnd.value.getTime() + steppedDeltaMinutes * 60000)
+    if (newEnd.getTime() > itemToUpdate.start.getTime() + minDurationMs) {
       itemToUpdate.end = newEnd
     }
   }
@@ -831,22 +840,40 @@ const overriddenItemIndex = ref<number | null>(null)
 const overriddenItemStyle = ref<{ top: string; left: string } | null>(null)
 
 
-
 const handleDragMove = (event: MouseEvent) => {
   if (!draggingItem.value || !dragGhost.value || !calendarContent.value) return
 
   // Calculate position relative to calendar content
   const calendarRect = calendarContent.value.getBoundingClientRect()
-  const dropX = event.clientX - calendarRect.left + calendarContent.value.scrollLeft
-  const dropY = event.clientY - calendarRect.top + calendarContent.value.scrollTop
-
   const calendarWidth = calendarContent.value.scrollWidth
   const dayWidth = calendarWidth / monthDays.value.length
 
-  let targetDayIndex = Math.floor(dropX / dayWidth)
+  // Get ghost element bounds
+  const ghostRect = dragGhost.value.getBoundingClientRect()
+  
+  // Calculate left and right edges of the ghost relative to calendar
+  const ghostLeftRelative = ghostRect.left - calendarRect.left + calendarContent.value.scrollLeft
+  const ghostRightRelative = ghostRect.right - calendarRect.left + calendarContent.value.scrollLeft
+
+  // Determine which day the leading edge (top-left for LTR, top-right for RTL) is in
+  let leadingEdgePosition: number
+
+  if (props.dir === 'rtl') {
+    // In RTL, the leading edge is the right side
+    leadingEdgePosition = ghostRightRelative
+  } else {
+    // In LTR, the leading edge is the left side
+    leadingEdgePosition = ghostLeftRelative
+  }
+
+  // Determine which day the leading edge is in
+  let targetDayIndex = Math.floor(leadingEdgePosition / dayWidth)
+
+  // Clamp to valid range immediately
   targetDayIndex = Math.max(0, Math.min(targetDayIndex, monthDays.value.length - 1))
   selectedIndex.value = targetDayIndex
 
+  // Update ghost position
   dragGhost.value.style.left = `${event.clientX - dragGhost.value.offsetWidth / 2}px`
   dragGhost.value.style.top = `${event.clientY - dragGhost.value.offsetHeight / 2}px`
 }
@@ -887,14 +914,6 @@ const handleDragStart = (event: MouseEvent, item: any, index: number) => {
   document.addEventListener('mousemove', handleDragMove)
   document.addEventListener('mouseup', handleDragEnd)
 }
-
-
-
-
-
-
-
-
 
 const handleDragEnd = (event: MouseEvent) => {
   if (!draggingItem.value || !calendarContent.value) return
@@ -966,29 +985,46 @@ const handleDragEnd = (event: MouseEvent) => {
       millisecond: 0
     })
   }
-const halfDuration = originalDurationMs / 2
-const newStart = new Date(newStartDt.toJSDate().getTime() - halfDuration)
+const newStart = newStartDt.toJSDate()
 const newEnd = new Date(newStart.getTime() + originalDurationMs)
 
-  const originalIndex = draggingItem.value.originalIndex
+const startOfDay = new Date(originalItem.start)
+startOfDay.setHours(0, 0, 0, 0)
+const endOfDay = new Date(originalItem.end)
+endOfDay.setHours(0, 0, 0, 0)
 
-  if (draggedElement.value) {
-    draggedElement.value.classList.add('no-transition')
-    draggedElement.value.classList.remove('dragging')
-  }
+const timeOnlyDurationMs =
+  originalItem.end.getTime() -
+  endOfDay.getTime() -
+  (originalItem.start.getTime() - startOfDay.getTime())
 
-  const updatedItems = props.modelValue.map((item, idx) => {
-    if (idx === originalIndex) {
-      return {
-        ...item,
-        start: newStart,
-        end: newEnd
-      }
+// Calculate half duration in milliseconds
+const halfDurationMs = timeOnlyDurationMs / 2
+console.log('duration:',halfDurationMs/60000)
+
+// Subtract half duration from both start and end
+const adjustedStart = new Date(newStart.getTime() - halfDurationMs)
+const adjustedEnd = new Date(newEnd.getTime() - halfDurationMs)
+
+const originalIndex = draggingItem.value.originalIndex
+
+if (draggedElement.value) {
+  draggedElement.value.classList.add('no-transition')
+  draggedElement.value.classList.remove('dragging')
+}
+
+const updatedItems = props.modelValue.map((item, idx) => {
+  if (idx === originalIndex) {
+    return {
+      ...item,
+      start: adjustedStart,
+      end: adjustedEnd
     }
-    return item
-  })
+  }
+  return item
+})
 
-  emit('update:modelValue', updatedItems)
+emit('update:modelValue', updatedItems)
 
   setTimeout(() => {
     if (draggedElement.value) {
