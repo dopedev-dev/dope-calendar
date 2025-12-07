@@ -1,3 +1,4 @@
+
 <template>
   <div :dir="dir" ref="calendar" class="calendar-wrapper  dope-calendar-grid">
     <div @click="deselectItems" @mousedown.stop="deselectItems" class="header-container">
@@ -60,6 +61,7 @@
   :class="{ 
     selected: selectedItemIndex === index, 
     dragging: draggingItem?.originalIndex === index,
+    'no-transition': silentUpdateIndex === index,
     'transition-to-final': overriddenItemIndex !== index
   }"
   :style="item.style"
@@ -71,14 +73,7 @@
                 <div class="resize-handle-top" @touchstart.stop="handleResizeStart($event, item, 'top')" @mousedown.stop="handleResizeStart($event, item, 'top')"></div>
                 
                 <slot name="item" :item="item">
-                  <!-- <div class="item-content">
-                    <div class="item-title">{{ item.title }}</div>
-                    <div class="item-time">
-                      {{ item.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }} -
-                      {{ item.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
-                    </div>
-                  </div> -->
-                </slot>
+                  </slot>
                  <div
               v-if="selectedItemIndex === index"
               class="resize-handle-left"
@@ -113,7 +108,7 @@
   </div>
 </template>
 <script lang="ts">
-import { type PropType, ref, defineComponent,watch, onMounted ,computed } from 'vue'
+import { type PropType, ref, defineComponent,watch, onMounted ,computed, nextTick } from 'vue'
 import jalaali from 'jalaali-js'
 interface CalendarItem {
   start: Date
@@ -242,6 +237,7 @@ export default defineComponent({
     const calendarHeader = ref<HTMLElement | null>(null)
     const contentContainer = ref<HTMLElement | null>(null)
     const isZooming = ref(false)
+    const silentUpdateIndex = ref<number | null>(null)
 
 
 
@@ -1005,6 +1001,10 @@ const handleDragStart = (event: MouseEvent | TouchEvent, item: any, index: numbe
   ghost.style.boxShadow = '0 5px 15px rgba(0,0,0,0.3)'
   ghost.style.width = `${rect.width}px`
   ghost.style.height = `${rect.height}px`
+  // Ensure we set coordinates based on current position so it doesn't jump initially
+  ghost.style.left = `${rect.left}px`
+  ghost.style.top = `${rect.top}px`
+  ghost.style.transition = 'none' // Disable transition during drag
 
   document.body.appendChild(ghost)
   dragGhost.value = ghost
@@ -1018,58 +1018,83 @@ const handleDragStart = (event: MouseEvent | TouchEvent, item: any, index: numbe
 
 
 const handleDragEnd = (event: MouseEvent | TouchEvent) => {
-  if (!draggingItem.value || !calendarContent.value) return
+  if (!draggingItem.value || !calendarContent.value || !contentContainer.value) return
   event.preventDefault()
 
-  // Clear auto-scroll interval
   if (autoScrollInterval.value !== null) {
     clearInterval(autoScrollInterval.value)
     autoScrollInterval.value = null
   }
 
-  if (dragGhost.value) {
-    dragGhost.value.remove()
-    dragGhost.value = null
+  document.removeEventListener('mousemove', handleDragMove)
+  document.removeEventListener('mouseup', handleDragEnd)
+  document.removeEventListener('touchmove', handleDragMove)
+  document.removeEventListener('touchend', handleDragEnd)
+
+  const clientX = 'changedTouches' in event ? event.changedTouches[0].clientX : event.clientX
+  const clientY = 'changedTouches' in event ? event.changedTouches[0].clientY : event.clientY
+
+  let isInsideContainer = false
+  if (contentContainer.value) {
+    const rect = contentContainer.value.getBoundingClientRect()
+    isInsideContainer =
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom
   }
 
   let targetDayIndex = selectedIndex.value
+  const isValidDrop = isInsideContainer && targetDayIndex !== -1 && targetDayIndex >= 0 && targetDayIndex < monthDays.value.length
   
-  if (targetDayIndex === -1) {
-    resetDrag()
-    return
-  }
+  const targetDayData = isValidDrop ? monthDays.value[targetDayIndex] : null
 
-  targetDayIndex = Math.max(0, Math.min(targetDayIndex, monthDays.value.length - 1))
+  let updatedItems: any[] = []
+  let targetRect = { top: 0, left: 0, width: 0, height: 0 }
 
-  const targetDayData = monthDays.value[targetDayIndex]
-  if (!targetDayData) {
-    resetDrag()
-    return
-  }
+  if (!isValidDrop || !targetDayData) {
+    // INVALID DROP: Revert to original position
+    if (draggedElement.value) {
+        const rect = draggedElement.value.getBoundingClientRect()
+        targetRect = { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
+    }
+  } else {
+    // VALID DROP: Calculate new position and data
+    const originalItem = draggingItem.value.item
+    const originalDurationMs = originalItem.end.getTime() - originalItem.start.getTime()
 
-  const originalItem = draggingItem.value.item
-  const originalDurationMs = originalItem.end.getTime() - originalItem.start.getTime()
+    const totalHours = props.endHour - props.startHour
+    const contentHeight = dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
 
-  const totalHours = props.endHour - props.startHour
-  const contentHeight =
-    dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
+    const calendarRect = calendarContent.value.getBoundingClientRect()
+    // We use the last known event position for "where it's dropped"
+    
+    // Logic to calculate NEW time
+    const dropY = clientY - calendarRect.top + calendarContent.value.scrollTop
+    const adjustedDropY = dropY - topPadding.value
+    const pixelsPerMinute = contentHeight / (totalHours * 60)
+    const offsetMinutes = adjustedDropY / pixelsPerMinute
+    const clampedMinutes = Math.max(0, Math.min(offsetMinutes, totalHours * 60))
+    const adjustedHourOffset = Math.floor(clampedMinutes / 60)
+    const adjustedMinuteOffset = Math.round(clampedMinutes % 60)
 
-  const calendarRect = calendarContent.value.getBoundingClientRect()
-  const clientY = 'changedTouches' in event ? event.changedTouches[0].clientY : event.clientY
+    let newStartDt: DateTime
 
-  const dropY = clientY - calendarRect.top + calendarContent.value.scrollTop
-  const adjustedDropY = dropY - topPadding.value
-  const pixelsPerMinute = contentHeight / (totalHours * 60)
-  const offsetMinutes = adjustedDropY / pixelsPerMinute
-  const clampedMinutes = Math.max(0, Math.min(offsetMinutes, totalHours * 60))
-  const adjustedHourOffset = Math.floor(clampedMinutes / 60)
-  const adjustedMinuteOffset = Math.round(clampedMinutes % 60)
-
-  let newStartDt: DateTime
-
-  if (props.jalaali) {
-    newStartDt = DateTime.fromObject(
-      {
+    if (props.jalaali) {
+        newStartDt = DateTime.fromObject(
+        {
+            day: targetDayData.day,
+            month: targetDayData.month,
+            year: targetDayData.year,
+            hour: props.startHour + adjustedHourOffset,
+            minute: adjustedMinuteOffset,
+            second: 0,
+            millisecond: 0
+        },
+        { zone: 'local', numberingSystem: 'latn', outputCalendar: 'persian' }
+        )
+    } else {
+        newStartDt = DateTime.fromObject({
         day: targetDayData.day,
         month: targetDayData.month,
         year: targetDayData.year,
@@ -1077,66 +1102,126 @@ const handleDragEnd = (event: MouseEvent | TouchEvent) => {
         minute: adjustedMinuteOffset,
         second: 0,
         millisecond: 0
-      },
-      { zone: 'local', numberingSystem: 'latn', outputCalendar: 'persian' }
-    )
-  } else {
-    newStartDt = DateTime.fromObject({
-      day: targetDayData.day,
-      month: targetDayData.month,
-      year: targetDayData.year,
-      hour: props.startHour + adjustedHourOffset,
-      minute: adjustedMinuteOffset,
-      second: 0,
-      millisecond: 0
+        })
+    }
+
+    const newStart = newStartDt.toJSDate()
+    const newEnd = new Date(newStart.getTime() + originalDurationMs)
+
+    const startOfDay = new Date(originalItem.start)
+    startOfDay.setHours(0, 0, 0, 0)
+    const endOfDay = new Date(originalItem.end)
+    endOfDay.setHours(0, 0, 0, 0)
+
+    const timeOnlyDurationMs =
+        originalItem.end.getTime() -
+        endOfDay.getTime() -
+        (originalItem.start.getTime() - startOfDay.getTime())
+
+    const halfDurationMs = timeOnlyDurationMs / 2
+
+    const adjustedStart = new Date(newStart.getTime() - halfDurationMs)
+    const adjustedEnd = new Date(newEnd.getTime() - halfDurationMs)
+
+    const originalIndex = draggingItem.value.originalIndex
+
+    updatedItems = props.modelValue.map((item, idx) => {
+        if (idx === originalIndex) {
+        return {
+            ...item,
+            start: adjustedStart,
+            end: adjustedEnd
+        }
+        }
+        return item
     })
+
+    // Calculate Grid Position for Animation Target
+    if (calendarContent.value) {
+        const containerRect = calendarContent.value.getBoundingClientRect()
+        const dayWidth = calendarContent.value.scrollWidth / monthDays.value.length
+        
+        // Calculate Top/Height pixels similar to processedItems logic
+        const startDt = DateTime.fromJSDate(adjustedStart)
+        const endDt = DateTime.fromJSDate(adjustedEnd)
+        
+        const dayStartOf = startDt.startOf('day').plus({ hours: props.startHour })
+        const itemStartOffsetMin = startDt.diff(dayStartOf, 'minutes').minutes
+        
+        const topOffsetPx = (itemStartOffsetMin / (totalHours * 60)) * contentHeight
+        
+        // FIX: Match processedItems logic for height calculation
+        // Create tempDate: end date but at the same day as start date
+        const tempEndDt = endDt.set({ year: startDt.year, month: startDt.month, day: startDt.day })
+        const durationMin = tempEndDt.diff(startDt, 'minutes').minutes
+        
+        const heightPx = (durationMin / (totalHours * 60)) * contentHeight
+        
+        // Handling dayspan for width
+        let daySpan = 1
+        if (!startDt.hasSame(endDt, 'day')) {
+             const diff = endDt.diff(startDt, 'days').days
+             daySpan = Math.floor(diff) + 1
+        }
+        const widthPx = daySpan * dayWidth
+
+        const leftPx = targetDayIndex * dayWidth
+        
+        targetRect = {
+            top: containerRect.top + topPadding.value + topOffsetPx - calendarContent.value.scrollTop,
+            left: containerRect.left + leftPx - calendarContent.value.scrollLeft,
+            width: widthPx,
+            height: heightPx
+        }
+    }
   }
 
-  const newStart = newStartDt.toJSDate()
-  const newEnd = new Date(newStart.getTime() + originalDurationMs)
+  // Perform Animation
+  if (dragGhost.value) {
+      // Force reflow
+      void dragGhost.value.offsetHeight;
+      
+      dragGhost.value.style.transition = 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)'
+      dragGhost.value.style.top = `${targetRect.top}px`
+      dragGhost.value.style.left = `${targetRect.left}px`
+      dragGhost.value.style.width = `${targetRect.width}px`
+      dragGhost.value.style.height = `${targetRect.height}px`
+      
+      // Wait for transition to finish
+      setTimeout(async () => {
+          // Temporarily disable transition on the real item to prevent "double jump"
+          if (draggingItem.value) {
+            silentUpdateIndex.value = draggingItem.value.originalIndex
+          }
 
-  const startOfDay = new Date(originalItem.start)
-  startOfDay.setHours(0, 0, 0, 0)
-  const endOfDay = new Date(originalItem.end)
-  endOfDay.setHours(0, 0, 0, 0)
+          if (isValidDrop) {
+              emit('update:modelValue', updatedItems)
+          }
+          
+          await nextTick()
 
-  const timeOnlyDurationMs =
-    originalItem.end.getTime() -
-    endOfDay.getTime() -
-    (originalItem.start.getTime() - startOfDay.getTime())
+          if (dragGhost.value) dragGhost.value.remove()
+          dragGhost.value = null
+          draggingItem.value = null
+          if (draggedElement.value) {
+            draggedElement.value.classList.remove('dragging')
+            draggedElement.value = null
+          }
+          selectedIndex.value = -1
+          selectedItemIndex.value = null
 
-  const halfDurationMs = timeOnlyDurationMs / 2
-
-  const adjustedStart = new Date(newStart.getTime() - halfDurationMs)
-  const adjustedEnd = new Date(newEnd.getTime() - halfDurationMs)
-
-  const originalIndex = draggingItem.value.originalIndex
-
-  if (draggedElement.value) {
-    draggedElement.value.classList.add('no-transition')
-    draggedElement.value.classList.remove('dragging')
-  }
-
-  const updatedItems = props.modelValue.map((item, idx) => {
-    if (idx === originalIndex) {
-      return {
-        ...item,
-        start: adjustedStart,
-        end: adjustedEnd
+          // Re-enable transitions
+          setTimeout(() => {
+            silentUpdateIndex.value = null
+          }, 50)
+      }, 300)
+  } else {
+      // Fallback
+      if (isValidDrop) {
+          emit('update:modelValue', updatedItems)
       }
-    }
-    return item
-  })
-
-  emit('update:modelValue', updatedItems)
-
-  setTimeout(() => {
-    if (draggedElement.value) {
-      draggedElement.value.classList.remove('no-transition')
-    }
-  }, 50)
-
-  resetDrag()
+      resetDrag()
+  }
 }
 
 
@@ -1291,6 +1376,7 @@ const handleHorizontalResizeEnd = () => {
   handleCalendarClick,
   overriddenItemIndex,
   overriddenItemStyle,
+  silentUpdateIndex,
 
   // resizing horizontally:
   handleHorizontalResizeStart,
