@@ -1,5 +1,9 @@
 <template>
+<<<<<<< HEAD
  <!-- <div class="h-dvh w-dvw">
+=======
+ <div class="h-dvh w-dvw">
+>>>>>>> 5b7042d284d235a9b103b7d52ed0d7a4372b83fe
     <CalendarGrid
       :georgian="false"
       :jalaali="true"
@@ -20,8 +24,8 @@
         </div>
       </template>
     </CalendarGrid>
-  </div>  -->
-  <DatePicker v-model="today"/>
+  </div> 
+ <DatePicker v-model="today"/> -->
 </template>
 <script setup lang="ts">
 import { ref } from 'vue'
