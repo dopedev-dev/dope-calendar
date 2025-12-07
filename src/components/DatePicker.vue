@@ -1,5 +1,5 @@
 <template>
-  <div class="dope-date-picker" :dir="dir" :style="customVars">
+  <div class="dope-date-picker" :class="{ 'dp-allow-transitions': !isAnimating && !isSilent }" :dir="dir" :style="customVars">
     <!-- Header -->
     <div class="dp-header">
       <button v-if="!fixedTime" class="dp-nav-btn" @click="triggerSlide('prev')" type="button">
@@ -54,7 +54,7 @@
           <!-- Slider (300% width) -->
           <div 
             class="dp-slider" 
-            :class="{ 'is-animating': isAnimating, 'is-silent': isSilent }"
+            :class="{ 'is-animating': isAnimating }"
             :style="sliderStyle"
             @transitionend="onTransitionEnd"
           >
@@ -320,10 +320,13 @@ export default defineComponent({
       else slideOffset.value = 1
     }
 
-    const onTransitionEnd = async () => {
+    const onTransitionEnd = async (e: Event) => {
+      // FIX: Ensure we only react to the slider's transition, not bubbles from children
+      if (e.target !== e.currentTarget) return
+      
       if (!isAnimating.value) return
       
-      // 1. Disable internal transitions (backgrounds, etc.)
+      // 1. Enter Silent Mode (Transitions are already off via class removal)
       isSilent.value = true
 
       // 2. Update data
@@ -340,9 +343,11 @@ export default defineComponent({
       // 4. Wait for DOM update
       await nextTick()
 
-      // 5. Re-enable transitions (Next Frame)
+      // 5. Re-enable transitions (Double RequestAnimationFrame to avoid flash)
       requestAnimationFrame(() => {
-         isSilent.value = false
+        requestAnimationFrame(() => {
+           isSilent.value = false
+        })
       })
     }
 
@@ -468,9 +473,9 @@ export default defineComponent({
   
   background: var(--dp-bg);
   /* No radius, no shadow */
-  border-radius: var(--dp-radius);
+  /* border-radius: var(--dp-radius); */
   box-shadow: var(--dp-shadow);
-  border: 1px solid var(--dp-border);
+  /* border: 1px solid var(--dp-border); */
   color: var(--dp-text);
   font-family: var(--dp-font-family);
   user-select: none;
@@ -555,6 +560,8 @@ export default defineComponent({
   color: var(--dp-text-muted);
   padding: 8px 0;
   width: var(--dp-cell-size);
+  /* Removed transition here, added to .dp-allow-transitions below */
+  transition: none;
 }
 .dp-weekday.is-holiday-header {
   color: var(--dp-holiday-text);
@@ -609,14 +616,17 @@ export default defineComponent({
   font-size: var(--dp-font-size);
   font-weight: var(--dp-weight-medium);
   position: relative;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Removed transition here, added to .dp-allow-transitions below */
+  transition: none;
   border: 1px solid transparent; 
   box-sizing: border-box;
 }
 
-/* SILENT UPDATE: Disable transition when swapping data to prevent flicker */
-.dp-slider.is-silent .dp-cell {
-  transition: none !important;
+/* === KEY FIX: Only allow transitions when we are NOT sliding/resetting === */
+.dp-allow-transitions .dp-cell,
+.dp-allow-transitions .dp-weekday,
+.dp-allow-transitions .dp-option-cell {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .dp-cell:hover:not(.is-disabled):not(.is-selected) {
@@ -689,7 +699,8 @@ export default defineComponent({
   cursor: pointer;
   font-size: 0.9rem;
   font-weight: var(--dp-weight-medium);
-  transition: var(--dp-transition);
+  /* Removed transition here, added to .dp-allow-transitions above */
+  transition: none;
   border: 1px solid transparent;
 }
 .dp-option-cell:hover { background: var(--dp-hover-bg); color: var(--dp-primary); }
