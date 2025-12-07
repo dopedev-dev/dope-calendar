@@ -1,111 +1,236 @@
 <template>
-<!-- <div class="h-dvh w-dvw">
-    =======
-    <div class="h-dvh w-dvw">
-      >>>>>>> 5b7042d284d235a9b103b7d52ed0d7a4372b83fe
-      <CalendarGrid :georgian="false" :jalaali="true" mode="month" dir="ltr" lang="en" editable :holidays="holidays"
-        v-model="calendarItems">
-        <template #item="{ item }">
-          <div class="custom-calendar-item cursor-pointer" :style="{ backgroundColor: item.color }">
-            <div class="item-title">{{ item.title }}</div>
-            <div class="item-time">
-              {{ item.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }} -
-              {{ item.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
-            </div>
-          </div>
-        </template>
-      </CalendarGrid>
+  <div class="app-container">
+    <h1 class="app-title">Dope Date Picker - Component Showcase</h1>
+    
+    <div class="grid-container">
+      
+      <!-- 1. Default Configuration -->
+      <div class="card">
+        <h3>1. Default (Gregory / English)</h3>
+        <p class="desc">Standard date picker with no restrictions.</p>
+        <DatePicker v-model="date1" />
+        <div class="output">Selected: {{ formatDate(date1) }}</div>
+      </div>
+
+      <!-- 2. Persian Calendar -->
+      <div class="card">
+        <h3>2. Persian (Jalaali / Farsi)</h3>
+        <p class="desc">RTL direction, Persian calendar system.</p>
+        <DatePicker 
+          v-model="date2" 
+          :options="{ 
+            calendar: 'persian', 
+            locale: 'fa', 
+            dir: 'rtl',
+            color: '#10b981'
+          }" 
+        />
+        <div class="output">Selected: {{ formatDate(date2) }}</div>
+      </div>
+
+      <!-- 3. Selection Mode: Future Only -->
+      <div class="card">
+        <h3>3. Future Dates Only</h3>
+        <p class="desc">Past dates are disabled.</p>
+        <DatePicker 
+          v-model="date3" 
+          :options="{ 
+            selectionMode: 'future',
+            color: '#3b82f6'
+          }" 
+        />
+        <div class="output">Selected: {{ formatDate(date3) }}</div>
+      </div>
+
+      <!-- 4. Selection Mode: Past Only -->
+      <div class="card">
+        <h3>4. Past Dates Only</h3>
+        <p class="desc">Future dates are disabled.</p>
+        <DatePicker 
+          v-model="date4" 
+          :options="{ 
+            selectionMode: 'past',
+            color: '#ef4444'
+          }" 
+        />
+        <div class="output">Selected: {{ formatDate(date4) }}</div>
+      </div>
+
+      <!-- 5. Time Picker Enabled -->
+      <div class="card">
+        <h3>5. With Time Picker</h3>
+        <p class="desc">Select hour and minute.</p>
+        <DatePicker 
+          v-model="date5" 
+          :options="{ 
+            enableTimePicker: true,
+            color: '#8b5cf6'
+          }" 
+        />
+        <div class="output">Selected: {{ formatDate(date5, true) }}</div>
+      </div>
+
+      <!-- 6. Mode: Year Picker -->
+      <div class="card">
+        <h3>6. Year Picker Mode</h3>
+        <p class="desc">Only select years.</p>
+        <DatePicker 
+          v-model="date6" 
+          :options="{ 
+            mode: 'year',
+            color: '#f59e0b'
+          }" 
+        />
+        <div class="output">Selected: {{ formatDate(date6) }}</div>
+      </div>
+
+      <!-- 7. Mode: Month Picker -->
+      <div class="card">
+        <h3>7. Month Picker Mode</h3>
+        <p class="desc">Only select months.</p>
+        <DatePicker 
+          v-model="date7" 
+          :options="{ 
+            mode: 'month',
+            color: '#ec4899'
+          }" 
+        />
+        <div class="output">Selected: {{ formatDate(date7) }}</div>
+      </div>
+
+      <!-- 8. Fixed Time (Boolean) -->
+      <div class="card">
+        <h3>8. Fixed View (Boolean)</h3>
+        <p class="desc">Navigation disabled. User locked to current view.</p>
+        <DatePicker 
+          v-model="date8" 
+          :options="{ 
+            fixedTime: true,
+            color: '#64748b'
+          }" 
+        />
+        <div class="output">Selected: {{ formatDate(date8) }}</div>
+      </div>
+
+      <!-- 9. Fixed Time (Specific Date) -->
+      <div class="card">
+        <h3>9. Fixed to Dec 2025</h3>
+        <p class="desc">Locked to a specific month/year provided in options.</p>
+        <DatePicker 
+          v-model="date9" 
+          :options="{ 
+            fixedTime: new Date('2025-12-01'),
+            color: '#0ea5e9'
+          }" 
+        />
+        <div class="output">Selected: {{ formatDate(date9) }}</div>
+      </div>
+
+      <!-- 10. Custom Navigation Slots -->
+      <div class="card">
+        <h3>10. Custom Nav Buttons</h3>
+        <p class="desc">Using named slots for Prev/Next.</p>
+        <DatePicker v-model="date10">
+           <template #prev="{ trigger }">
+             <button @click="trigger" style="background:white; border:1px solid #ccc; cursor:pointer; padding:5px 10px; border-radius:4px; font-size: 12px;">Prev</button>
+           </template>
+           <template #next="{ trigger }">
+             <button @click="trigger" style="background:white; border:1px solid #ccc; cursor:pointer; padding:5px 10px; border-radius:4px; font-size: 12px;">Next</button>
+           </template>
+        </DatePicker>
+        <div class="output">Selected: {{ formatDate(date10) }}</div>
+      </div>
+
     </div>
-    -->
-    <DatePicker v-model="today" />
+  </div>
 </template>
+
 <script setup lang="ts">
 import { ref } from 'vue'
 import DatePicker from './components/DatePicker.vue'
-import CalendarGrid from './components/CalendarGrid.vue'
-const today = new Date()
-const calendarItems = ref(
-  [
-    {
-      title: 'Team Sync',
-      start: new Date(new Date(today).setHours(10, 0, 0, 0)),
-      end: new Date(new Date(today).setHours(11, 30, 0, 0)),
-      color: 'rgba(54, 162, 235, 0.7)', // Blue
-      description: 'Weekly team synchronization meeting.'
-    },
-    {
-      title: 'Lunch Break',
-      start: new Date(new Date(today).setHours(13, 0, 0, 0)),
-      end: new Date(new Date(today).setHours(14, 0, 0, 0)),
-      color: 'rgba(75, 192, 192, 0.7)', // Green
-      description: 'Quick lunch at the cafeteria.'
-    },
-    // Overlapping item for today
-    {
-      title: 'Dev Standup',
-      start: new Date(new Date(today).setHours(10, 30, 0, 0)),
-      end: new Date(new Date(today).setHours(11, 0, 0, 0)),
-      color: 'rgba(153, 102, 255, 0.7)', // Purple
-      description: 'Daily developer standup.'
-    },
-    // Item for yesterday
-    {
-      title: 'Code Review',
-      start: new Date(new Date(new Date().setDate(today.getDate() - 1)).setHours(15, 0, 0, 0)),
-      end: new Date(new Date(new Date().setDate(today.getDate() - 1)).setHours(16, 30, 0, 0)),
-      color: 'rgba(255, 159, 64, 0.7)', // Orange
-      description: 'Review pull requests.'
-    },
-    // Item for tomorrow
-    {
-      title: 'Project Planning',
-      start: new Date(new Date(new Date().setDate(today.getDate() + 1)).setHours(9, 0, 0, 0)),
-      end: new Date(new Date(new Date().setDate(today.getDate() + 1)).setHours(12, 0, 0, 0)),
-      color: 'rgba(255, 206, 86, 0.7)', // Yellow
-      description: 'Planning session for the next sprint.'
-    },
-    // Another item for tomorrow
-    {
-      title: 'Follow-up Calls',
-      start: new Date(new Date(new Date().setDate(today.getDate() + 1)).setHours(14, 0, 0, 0)),
-      end: new Date(new Date(new Date().setDate(today.getDate() + 1)).setHours(15, 0, 0, 0)),
-      color: 'rgba(54, 162, 235, 0.7)', // Blue
-      description: 'Client follow-up calls.'
-    },
-    // Item for two days from now
-    {
-      title: 'Client Demo',
-      start: new Date(new Date(new Date().setDate(today.getDate() + 2)).setHours(16, 5, 0, 0)),
-      end: new Date(new Date(new Date().setDate(today.getDate() + 2)).setHours(17, 0, 0, 0)),
-      color: 'rgba(255, 99, 132, 0.7)', // Red
-      description: 'Present the new features to the client.'
-    },
-    // Item for three days from now
-    {
-      title: 'Marketing Meeting',
-      start: new Date(new Date(new Date().setDate(today.getDate() + 3)).setHours(11, 0, 0, 0)),
-      end: new Date(new Date(new Date().setDate(today.getDate() + 3)).setHours(12, 30, 0, 0)),
-      color: 'rgba(75, 192, 192, 0.7)', // Green
-      description: 'Discuss marketing strategies.'
-    },
 
-    // Item for four days from now
-    {
-      title: 'Design Review',
-      start: new Date(new Date(new Date().setDate(today.getDate() + 4)).setHours(10, 0, 0, 0)),
-      end: new Date(new Date(new Date().setDate(today.getDate() + 4)).setHours(11, 0, 0, 0)),
-      color: 'rgba(153, 102, 255, 0.7)', // Purple
-      description: 'Review new UI/UX designs.'
-    }
-  ]
-)
-const holidays = ref([
-  new Date(new Date().setDate(today.getDate() + 5)) // Example holiday 5 days from now
-])
+// Refs for models
+const date1 = ref(new Date())
+const date2 = ref(new Date())
+const date3 = ref(null) // Future
+const date4 = ref(null) // Past
+const date5 = ref(new Date())
+const date6 = ref(new Date())
+const date7 = ref(new Date())
+const date8 = ref(new Date())
+const date9 = ref(new Date())
+const date10 = ref(new Date())
+
+// Helper to format date for display
+const formatDate = (val: any, time = false) => {
+  if (!val) return 'None'
+  const d = new Date(val)
+  if (isNaN(d.getTime())) return 'Invalid'
+  
+  const options: Intl.DateTimeFormatOptions = { 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric' 
+  }
+  if (time) {
+    options.hour = '2-digit'
+    options.minute = '2-digit'
+  }
+  return d.toLocaleDateString(undefined, options) + (time ? ' ' + d.toLocaleTimeString(undefined, {hour: '2-digit', minute:'2-digit'}) : '')
+}
 </script>
+
 <style scoped>
-.custom-calendar-item {
+.app-container {
+  font-family: sans-serif;
+  padding: 40px;
+  background-color: #f3f4f6;
+  min-height: 100vh;
+}
+.app-title {
+  text-align: center;
+  margin-bottom: 40px;
+  color: #1f2937;
+}
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+  justify-items: center;
+}
+.card {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   width: 100%;
-  height: 100%;
+  max-width: 360px;
+  box-sizing: border-box;
+}
+.card h3 {
+  margin: 0 0 8px 0;
+  font-size: 1.1rem;
+  color: #374151;
+}
+.desc {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-bottom: 16px;
+  text-align: center;
+  min-height: 40px;
+}
+.output {
+  margin-top: 16px;
+  font-family: monospace;
+  background: #f9fafb;
+  padding: 8px 12px;
+  border-radius: 6px;
+  width: 100%;
+  text-align: center;
+  border: 1px solid #e5e7eb;
+  color: #4b5563;
 }
 </style>

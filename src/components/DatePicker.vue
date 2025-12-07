@@ -1,17 +1,24 @@
 <template>
-  <div class="dope-date-picker" :class="{ 'dp-allow-transitions': !isAnimating && !isSilent }" :dir="dir" :style="customVars">
+  <div class="dope-date-picker" :class="{ 'dp-allow-transitions': !isAnimating && !isSilent }" :dir="opts.dir" :style="customVars">
     <!-- Header -->
     <div class="dp-header">
-      <button v-if="!fixedTime" class="dp-nav-btn" @click="triggerSlide('prev')" type="button">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256"><path fill="currentColor" d="M165.66 202.34a8 8 0 0 1-11.32 11.32l-80-80a8 8 0 0 1 0-11.32l80-80a8 8 0 0 1 11.32 11.32L96.97 128Z"/></svg>
-      </button>
+      <slot name="prev" :trigger="() => handleNavigation('prev')" v-if="!isFixed">
+        <button 
+          class="dp-nav-btn" 
+          :class="{ 'dp-nav-hide': viewMode === 'year' }"
+          @click="handleNavigation('prev')" 
+          type="button"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256"><path fill="currentColor" d="M165.66 202.34a8 8 0 0 1-11.32 11.32l-80-80a8 8 0 0 1 0-11.32l80-80a8 8 0 0 1 11.32 11.32L96.97 128Z"/></svg>
+        </button>
+      </slot>
       
       <div class="dp-title-group">
         <button 
           v-if="viewMode === 'day'" 
           class="dp-title-btn" 
           @click="canSwitchView && (viewMode = 'month')"
-          :disabled="!enableMonthPicker"
+          :disabled="isFixed || !opts.enableMonthPicker"
           type="button"
         >
           {{ currentMonthName }}
@@ -20,21 +27,28 @@
         <button 
           class="dp-title-btn" 
           @click="canSwitchView && (viewMode = 'year')"
-          :disabled="!enableYearPicker"
+          :disabled="isFixed || !opts.enableYearPicker"
           type="button"
         >
           {{ currentYear }}
         </button>
       </div>
 
-      <button v-if="!fixedTime" class="dp-nav-btn" @click="triggerSlide('next')" type="button">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256"><path fill="currentColor" d="m90.34 202.34l80-80a8 8 0 0 0 0-11.32l-80-80a8 8 0 0 0-11.32 11.32L159.03 128l-80 80a8 8 0 0 0 11.31 11.34Z"/></svg>
-      </button>
+      <slot name="next" :trigger="() => handleNavigation('next')" v-if="!isFixed">
+        <button 
+          class="dp-nav-btn" 
+          :class="{ 'dp-nav-hide': viewMode === 'year' }"
+          @click="handleNavigation('next')" 
+          type="button"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256"><path fill="currentColor" d="m90.34 202.34l80-80a8 8 0 0 0 0-11.32l-80-80a8 8 0 0 0-11.32 11.32L159.03 128l-80 80a8 8 0 0 0 11.31 11.34Z"/></svg>
+        </button>
+      </slot>
     </div>
 
     <!-- Body Viewport -->
     <div class="dp-body">
-      <Transition name="dp-fade" mode="out-in">
+      <Transition name="dp-fade" mode="out-in" @after-enter="onViewSwitch">
         
         <!-- Day View (Sliding Carousel) -->
         <div v-if="viewMode === 'day'" class="dp-viewport" key="day">
@@ -134,6 +148,7 @@
               v-for="year in yearsList" 
               :key="year"
               class="dp-option-cell"
+              :data-year="year"
               :class="{
                 'is-selected': year === displayDate.year,
                 'is-current': year === now.year
@@ -149,7 +164,7 @@
     </div>
 
     <!-- Time Picker -->
-    <div v-if="enableTimePicker" class="dp-footer">
+    <div v-if="opts.enableTimePicker" class="dp-footer">
       <div class="dp-time-wrapper">
         <div class="dp-time-col">
           <button class="dp-icon-btn" @click="updateTime(1, 'hour')" type="button">▲</button>
@@ -188,28 +203,62 @@ export interface CalendarEvent {
   count?: number
 }
 
+export interface DatePickerOptions {
+  mode?: 'date' | 'month' | 'year' // New Mode Prop
+  locale?: string
+  calendar?: 'gregory' | 'persian' | 'islamic'
+  dir?: 'ltr' | 'rtl'
+  minDate?: Date
+  maxDate?: Date
+  events?: CalendarEvent[]
+  holidays?: (Date | string)[]
+  enableTimePicker?: boolean
+  enableYearPicker?: boolean
+  enableMonthPicker?: boolean
+  fixedTime?: boolean | Date | string // Updated Type
+  monthOffset?: number
+  color?: string
+  selectionMode?: 'all' | 'future' | 'past'
+}
+
 export default defineComponent({
   name: 'DatePicker',
   props: {
     modelValue: { type: [Date, String], default: null },
-    locale: { type: String, default: 'en' },
-    calendar: { type: String as PropType<'gregory' | 'persian' | 'islamic'>, default: 'gregory' },
-    dir: { type: String as PropType<'ltr' | 'rtl'>, default: 'ltr' },
-    minDate: Date,
-    maxDate: Date,
-    events: { type: Array as PropType<CalendarEvent[]>, default: () => [] },
-    holidays: { type: Array as PropType<(Date | string)[]>, default: () => [] },
-    enableTimePicker: { type: Boolean, default: false },
-    enableYearPicker: { type: Boolean, default: true },
-    enableMonthPicker: { type: Boolean, default: true },
-    fixedTime: { type: Boolean, default: false },
-    monthOffset: { type: Number, default: 0 },
-    color: { type: String, default: '' }
+    options: {
+      type: Object as PropType<DatePickerOptions>,
+      default: () => ({})
+    }
   },
   emits: ['update:modelValue'],
   setup(props, { emit }) {
-    const now = DateTime.now().reconfigure({ outputCalendar: props.calendar, locale: props.locale })
-    const displayDate = ref<DateTime>(now.plus({ months: props.monthOffset }))
+    // --- Options Merge Logic ---
+    const defaultOptions: Required<Omit<DatePickerOptions, 'minDate'|'maxDate'|'events'|'holidays'|'color'>> & {
+        minDate?: Date; maxDate?: Date; events: CalendarEvent[]; holidays: (Date|string)[]; color: string
+    } = {
+      mode: 'date',
+      locale: 'en',
+      calendar: 'gregory',
+      dir: 'ltr',
+      events: [],
+      holidays: [],
+      enableTimePicker: false,
+      enableYearPicker: true,
+      enableMonthPicker: true,
+      fixedTime: false,
+      monthOffset: 0,
+      color: '',
+      selectionMode: 'all',
+      // optionals
+      minDate: undefined,
+      maxDate: undefined
+    }
+
+    const opts = computed(() => ({ ...defaultOptions, ...props.options }))
+
+    // Initialize with safe defaults based on options
+    const now = DateTime.now().reconfigure({ outputCalendar: opts.value.calendar, locale: opts.value.locale })
+    const displayDate = ref<DateTime>(now.plus({ months: opts.value.monthOffset }))
     const selectedDt = ref<DateTime | null>(null)
     const viewMode = ref<'day' | 'month' | 'year'>('day')
     const timeInputs = ref({ hour: '12', minute: '00' })
@@ -221,12 +270,35 @@ export default defineComponent({
     const slideOffset = ref(0) // -1 (Next), 0 (Current), 1 (Prev)
 
     const customVars = computed(() => {
-      return props.color ? { '--dp-primary': props.color } : {}
+      return opts.value.color ? { '--dp-primary': opts.value.color } : {}
     })
 
-    const canSwitchView = computed(() => !props.fixedTime)
+    const isFixed = computed(() => !!opts.value.fixedTime)
+    const canSwitchView = computed(() => !isFixed.value)
     const currentMonthName = computed(() => displayDate.value.toFormat('MMMM'))
     const currentYear = computed(() => displayDate.value.toFormat('yyyy'))
+
+    // Initialize View Mode based on Mode Prop
+    watch(() => opts.value.mode, (newMode) => {
+      if (newMode === 'year') viewMode.value = 'year'
+      else if (newMode === 'month') viewMode.value = 'month'
+      else viewMode.value = 'day'
+    }, { immediate: true })
+
+    // Fixed Time Logic (Date Parsing)
+    watch(() => opts.value.fixedTime, (val) => {
+      if (!val || val === true) return // standard boolean check
+      
+      try {
+        let dt = val instanceof Date ? DateTime.fromJSDate(val) : DateTime.fromISO(val as string)
+        if (dt.isValid) {
+          dt = dt.reconfigure({ outputCalendar: opts.value.calendar, locale: opts.value.locale })
+          displayDate.value = dt
+        }
+      } catch (e) {
+        // silent fail
+      }
+    }, { immediate: true })
     
     // --- Dynamic Header ---
     const dynamicWeekDays = computed(() => {
@@ -237,7 +309,7 @@ export default defineComponent({
       for (let i = 0; i < 7; i++) {
         const d = startGrid.plus({ days: i })
         // Check for Friday (7 in Luxon Persian) ONLY if calendar is Persian
-        const isPersianFri = props.calendar === 'persian' && d.weekday === 7
+        const isPersianFri = opts.value.calendar === 'persian' && d.weekday === 7
         
         headers.push({
           label: d.toFormat('ccc'), 
@@ -248,7 +320,7 @@ export default defineComponent({
     })
 
     const isHolidayCheck = (dt: DateTime) => {
-      return props.holidays.some(h => {
+      return opts.value.holidays.some(h => {
         const hDt = h instanceof Date ? DateTime.fromJSDate(h) : DateTime.fromISO(h)
         return hDt.hasSame(dt, 'day')
       })
@@ -260,19 +332,36 @@ export default defineComponent({
       const days = []
       let curr = startGrid
       
+      const currentStartOfDay = now.startOf('day')
+      const currentEndOfDay = now.endOf('day')
+
       for (let i = 0; i < 42; i++) {
-        const eventMatch = props.events.find(e => {
+        const eventMatch = opts.value.events.find(e => {
           const eDate = e.date instanceof Date ? DateTime.fromJSDate(e.date) : DateTime.fromISO(e.date as string)
           return eDate.hasSame(curr, 'day')
         })
 
-        const isSelected = selectedDt.value ? curr.hasSame(selectedDt.value, 'day') : false
-        const isToday = curr.hasSame(now, 'day')
         const isCurrentMonth = curr.hasSame(basisDate, 'month')
         
+        // Strict Selection Display: Only show selected state if it matches date AND is in the current month view
+        const isSelected = selectedDt.value 
+          ? (curr.hasSame(selectedDt.value, 'day') && isCurrentMonth) 
+          : false
+          
+        const isToday = curr.hasSame(now, 'day')
+        
         let isDisabled = false
-        if (props.minDate && curr < DateTime.fromJSDate(props.minDate).startOf('day')) isDisabled = true
-        if (props.maxDate && curr > DateTime.fromJSDate(props.maxDate).endOf('day')) isDisabled = true
+        
+        // 1. Min/Max Logic
+        if (opts.value.minDate && curr < DateTime.fromJSDate(opts.value.minDate).startOf('day')) isDisabled = true
+        if (opts.value.maxDate && curr > DateTime.fromJSDate(opts.value.maxDate).endOf('day')) isDisabled = true
+
+        // 2. Selection Mode Logic
+        if (opts.value.selectionMode === 'future' && curr < currentStartOfDay) isDisabled = true
+        if (opts.value.selectionMode === 'past' && curr > currentEndOfDay) isDisabled = true
+
+        // 3. Other Month Restriction (User Requirement: "must not be selectable")
+        if (!isCurrentMonth) isDisabled = true
 
         const isHoliday = isHolidayCheck(curr)
 
@@ -321,12 +410,11 @@ export default defineComponent({
     }
 
     const onTransitionEnd = async (e: Event) => {
-      // FIX: Ensure we only react to the slider's transition, not bubbles from children
       if (e.target !== e.currentTarget) return
       
       if (!isAnimating.value) return
       
-      // 1. Enter Silent Mode (Transitions are already off via class removal)
+      // 1. Enter Silent Mode
       isSilent.value = true
 
       // 2. Update data
@@ -336,19 +424,34 @@ export default defineComponent({
         displayDate.value = displayDate.value.minus({ months: 1 })
       }
       
-      // 3. Reset Slider Position (Instant because isAnimating=false)
+      // 3. Reset Slider
       isAnimating.value = false
       slideOffset.value = 0
       
-      // 4. Wait for DOM update
+      // 4. Wait for DOM
       await nextTick()
 
-      // 5. Re-enable transitions (Double RequestAnimationFrame to avoid flash)
+      // 5. Re-enable transitions
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
            isSilent.value = false
         })
       })
+    }
+
+    const handleNavigation = (dir: 'prev' | 'next') => {
+      // 1. Year Mode: Buttons should be hidden visually (scale 0), so we ignore clicks just in case
+      if (viewMode.value === 'year') return 
+
+      // 2. Month Mode: Navigation changes the year
+      if (viewMode.value === 'month') {
+        const amount = dir === 'next' ? 1 : -1
+        displayDate.value = displayDate.value.plus({ years: amount })
+      } 
+      // 3. Day Mode: Triggers standard sliding animation
+      else {
+        triggerSlide(dir)
+      }
     }
 
     const handlePrev = () => {
@@ -370,8 +473,32 @@ export default defineComponent({
       const newDt = dt.set({ hour, minute })
       emitUpdate(newDt)
     }
-    const selectMonth = (month: number) => { displayDate.value = displayDate.value.set({ month }); viewMode.value = 'day' }
-    const selectYear = (year: number) => { displayDate.value = displayDate.value.set({ year }); viewMode.value = 'month' }
+
+    const selectMonth = (month: number) => { 
+      // Update month
+      displayDate.value = displayDate.value.set({ month })
+      
+      // If mode is strict month picker, emit and stay
+      if (opts.value.mode === 'month') {
+        emitUpdate(displayDate.value)
+      } else {
+        // Otherwise drill down
+        viewMode.value = 'day'
+      }
+    }
+
+    const selectYear = (year: number) => { 
+      // Update year
+      displayDate.value = displayDate.value.set({ year })
+      
+      // If mode is strict year picker, emit and stay
+      if (opts.value.mode === 'year') {
+        emitUpdate(displayDate.value)
+      } else {
+        // Otherwise drill down
+        viewMode.value = 'month'
+      }
+    }
     
     const updateTime = (amt: number, unit: 'hour'|'minute') => {
        let val = parseInt(timeInputs.value[unit]) || 0; val += amt;
@@ -390,8 +517,12 @@ export default defineComponent({
 
     const parseModelValue = (val: Date|string|null) => {
        if(!val) return null
-       let dt = val instanceof Date ? DateTime.fromJSDate(val) : DateTime.fromISO(val)
-       return dt.isValid ? dt.reconfigure({ outputCalendar: props.calendar, locale: props.locale }) : null
+       try {
+         let dt = val instanceof Date ? DateTime.fromJSDate(val) : DateTime.fromISO(val)
+         return dt.isValid ? dt.reconfigure({ outputCalendar: opts.value.calendar, locale: opts.value.locale }) : null
+       } catch {
+         return null
+       }
     }
 
     const emitUpdate = (dt: DateTime) => {
@@ -401,45 +532,57 @@ export default defineComponent({
 
     // --- Computed Lists ---
     const monthsList = computed(() => {
-      const months = Info.months('long', { locale: props.locale, outputCalendar: props.calendar })
+      const months = Info.months('long', { locale: opts.value.locale, outputCalendar: opts.value.calendar })
       return months.map((m, i) => ({
         label: m, value: i + 1, isCurrent: (i + 1) === now.month && displayDate.value.year === now.year
       }))
     })
 
     const yearsList = computed(() => {
-      const currentY = displayDate.value.year
-      const start = currentY - 100
-      const end = currentY + 100
+      // User Req: "render the previous 100 years and the next 20 years"
+      // We base this on the CURRENT real time year, as "previous" usually implies history from today.
+      const currentRealYear = now.year
+      const start = currentRealYear - 100
+      const end = currentRealYear + 20
       const years = []
       for (let y = start; y <= end; y++) { years.push(y) }
       return years
     })
 
+    // Watchers
     watch(() => props.modelValue, (val) => {
       const parsed = parseModelValue(val)
       if (parsed) {
         selectedDt.value = parsed
         timeInputs.value.hour = parsed.hour.toString().padStart(2, '0')
         timeInputs.value.minute = parsed.minute.toString().padStart(2, '0')
-        if (!props.fixedTime && !props.monthOffset) {
+        // Only sync displayDate if NOT fixed time, NOT offset, and different month
+        if (!opts.value.fixedTime && !opts.value.monthOffset) {
            if (!parsed.hasSame(displayDate.value, 'month')) displayDate.value = parsed
         }
+      } else {
+        selectedDt.value = null // Safe clear if null passed
       }
     }, { immediate: true })
 
-    watch([() => props.locale, () => props.calendar], ([newLoc, newCal]) => {
+    watch([() => opts.value.locale, () => opts.value.calendar], ([newLoc, newCal]) => {
       if (selectedDt.value) selectedDt.value = selectedDt.value.reconfigure({ locale: newLoc, outputCalendar: newCal })
       displayDate.value = displayDate.value.reconfigure({ locale: newLoc, outputCalendar: newCal })
     })
 
-    watch(viewMode, async (mode) => {
-      if (mode === 'year') {
-        await nextTick()
-        const el = yearGridRef.value?.querySelector('.is-selected') || yearGridRef.value?.querySelector('.is-current')
-        el?.scrollIntoView({ block: 'center', behavior: 'auto' })
+    const onViewSwitch = () => {
+      if (viewMode.value === 'year') {
+         const targetYear = selectedDt.value ? selectedDt.value.year : now.year
+         let el = yearGridRef.value?.querySelector(`[data-year="${targetYear}"]`)
+         
+         if (!el) {
+            // Fallback to current year if selected is not in range
+            el = yearGridRef.value?.querySelector(`[data-year="${now.year}"]`)
+         }
+
+         el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
       }
-    })
+    }
 
     const getDayClasses = (dayObj: any) => ({
       'is-today': dayObj.isToday,
@@ -454,7 +597,8 @@ export default defineComponent({
       dynamicWeekDays, prevGrid, currentGrid, nextGrid, monthsList, yearsList, timeInputs, customVars,
       canSwitchView, yearGridRef, handlePrev, handleNext, selectDate, selectMonth, selectYear,
       updateTime, validateTime, getDayClasses, 
-      sliderStyle, isAnimating, onTransitionEnd, triggerSlide, isSilent
+      sliderStyle, isAnimating, onTransitionEnd, triggerSlide, isSilent, opts, onViewSwitch, handleNavigation,
+      isFixed
     }
   }
 })
@@ -722,4 +866,11 @@ export default defineComponent({
 .dp-fade-enter-active, .dp-fade-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
 .dp-fade-enter-from { opacity: 0; transform: scale(0.95); }
 .dp-fade-leave-to { opacity: 0; transform: scale(1.05); display: none; }
+
+/* Nav Hide Animation */
+.dp-nav-hide {
+  transform: scale(0);
+  opacity: 0;
+  pointer-events: none;
+}
 </style>
