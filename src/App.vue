@@ -19,10 +19,9 @@
         <DatePicker 
           v-model="date2" 
           :options="{ 
-            calendar: 'persian', 
+            dateMode: 'jalaali', 
             locale: 'fa', 
-            dir: 'rtl',
-            color: '#10b981'
+            dir: 'ltr',
           }" 
         />
         <div class="output">Selected: {{ formatDate(date2) }}</div>
@@ -30,8 +29,8 @@
 
       <!-- 3. Selection Mode: Future Only -->
       <div class="card">
-        <h3>3. Future Dates Only</h3>
-        <p class="desc">Past dates are disabled.</p>
+        <h3>3. Future Dates Only (Day View)</h3>
+        <p class="desc">Try clicking "Prev Month" until it disables.</p>
         <DatePicker 
           v-model="date3" 
           :options="{ 
@@ -44,8 +43,8 @@
 
       <!-- 4. Selection Mode: Past Only -->
       <div class="card">
-        <h3>4. Past Dates Only</h3>
-        <p class="desc">Future dates are disabled.</p>
+        <h3>4. Past Dates Only (Day View)</h3>
+        <p class="desc">Try clicking "Next Month" until it disables.</p>
         <DatePicker 
           v-model="date4" 
           :options="{ 
@@ -73,7 +72,7 @@
       <!-- 6. Mode: Year Picker -->
       <div class="card">
         <h3>6. Year Picker Mode</h3>
-        <p class="desc">Only select years.</p>
+        <p class="desc">Only select years. (Nav buttons hidden in Year mode)</p>
         <DatePicker 
           v-model="date6" 
           :options="{ 
@@ -131,14 +130,58 @@
         <h3>10. Custom Nav Buttons</h3>
         <p class="desc">Using named slots for Prev/Next.</p>
         <DatePicker v-model="date10">
-           <template #prev="{ trigger }">
-             <button @click="trigger" style="background:white; border:1px solid #ccc; cursor:pointer; padding:5px 10px; border-radius:4px; font-size: 12px;">Prev</button>
+           <template #prev="{ trigger, disabled }">
+             <button 
+               @click="trigger" 
+               :disabled="disabled"
+               :style="{ opacity: disabled ? 0.5 : 1 }"
+               style="background:white; border:1px solid #ccc; cursor:pointer; padding:5px 10px; border-radius:4px; font-size: 12px;"
+             >
+               Prev
+             </button>
            </template>
-           <template #next="{ trigger }">
-             <button @click="trigger" style="background:white; border:1px solid #ccc; cursor:pointer; padding:5px 10px; border-radius:4px; font-size: 12px;">Next</button>
+           <template #next="{ trigger, disabled }">
+             <button 
+               @click="trigger" 
+               :disabled="disabled"
+               :style="{ opacity: disabled ? 0.5 : 1 }"
+               style="background:white; border:1px solid #ccc; cursor:pointer; padding:5px 10px; border-radius:4px; font-size: 12px;"
+             >
+               Next
+             </button>
            </template>
         </DatePicker>
         <div class="output">Selected: {{ formatDate(date10) }}</div>
+      </div>
+
+      <!-- 11. Month Picker + Future Only -->
+      <div class="card">
+        <h3>11. Month Picker (Future)</h3>
+        <p class="desc">Navigates Years. Prev Year button should disable.</p>
+        <DatePicker 
+          v-model="date11" 
+          :options="{ 
+            mode: 'month',
+            selectionMode: 'future',
+            color: '#14b8a6'
+          }" 
+        />
+        <div class="output">Selected: {{ formatDate(date11) }}</div>
+      </div>
+
+      <!-- 12. Month Picker + Past Only -->
+      <div class="card">
+        <h3>12. Month Picker (Past)</h3>
+        <p class="desc">Navigates Years. Next Year button should disable.</p>
+        <DatePicker 
+          v-model="date12" 
+          :options="{ 
+            mode: 'month',
+            selectionMode: 'past',
+            color: '#f43f5e'
+          }" 
+        />
+        <div class="output">Selected: {{ formatDate(date12) }}</div>
       </div>
 
     </div>
@@ -160,6 +203,8 @@ const date7 = ref(new Date())
 const date8 = ref(new Date())
 const date9 = ref(new Date())
 const date10 = ref(new Date())
+const date11 = ref(new Date())
+const date12 = ref(new Date())
 
 // Helper to format date for display
 const formatDate = (val: any, time = false) => {

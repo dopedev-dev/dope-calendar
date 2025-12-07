@@ -1,15 +1,17 @@
 <template>
-  <div class="dope-date-picker" :class="{ 'dp-allow-transitions': !isAnimating && !isSilent }" :dir="opts.dir" :style="customVars">
+  <div class="dope-date-picker" :class="{ 'dp-allow-transitions': !isAnimating && !isSilent }" :dir="dir" :style="customVars">
     <!-- Header -->
     <div class="dp-header">
-      <slot name="prev" :trigger="() => handleNavigation('prev')" v-if="!isFixed">
+      <slot name="prev" :trigger="() => canGoPrev && handleNavigation('prev')" :disabled="!canGoPrev" v-if="!isFixed">
         <button 
           class="dp-nav-btn" 
           :class="{ 'dp-nav-hide': viewMode === 'year' }"
           @click="handleNavigation('prev')" 
+          :disabled="!canGoPrev"
           type="button"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256"><path fill="currentColor" d="M165.66 202.34a8 8 0 0 1-11.32 11.32l-80-80a8 8 0 0 1 0-11.32l80-80a8 8 0 0 1 11.32 11.32L96.97 128Z"/></svg>
+          <svg v-if="dir === 'rtl'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256"><path fill="currentColor" d="m90.34 202.34l80-80a8 8 0 0 0 0-11.32l-80-80a8 8 0 0 0-11.32 11.32L159.03 128l-80 80a8 8 0 0 0 11.31 11.34Z"/></svg>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256"><path fill="currentColor" d="M165.66 202.34a8 8 0 0 1-11.32 11.32l-80-80a8 8 0 0 1 0-11.32l80-80a8 8 0 0 1 11.32 11.32L96.97 128Z"/></svg>
         </button>
       </slot>
       
@@ -34,14 +36,16 @@
         </button>
       </div>
 
-      <slot name="next" :trigger="() => handleNavigation('next')" v-if="!isFixed">
+      <slot name="next" :trigger="() => canGoNext && handleNavigation('next')" :disabled="!canGoNext" v-if="!isFixed">
         <button 
           class="dp-nav-btn" 
           :class="{ 'dp-nav-hide': viewMode === 'year' }"
           @click="handleNavigation('next')" 
+          :disabled="!canGoNext"
           type="button"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256"><path fill="currentColor" d="m90.34 202.34l80-80a8 8 0 0 0 0-11.32l-80-80a8 8 0 0 0-11.32 11.32L159.03 128l-80 80a8 8 0 0 0 11.31 11.34Z"/></svg>
+          <svg v-if="dir === 'rtl'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256"><path fill="currentColor" d="M165.66 202.34a8 8 0 0 1-11.32 11.32l-80-80a8 8 0 0 1 0-11.32l80-80a8 8 0 0 1 11.32 11.32L96.97 128Z"/></svg>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256"><path fill="currentColor" d="m90.34 202.34l80-80a8 8 0 0 0 0-11.32l-80-80a8 8 0 0 0-11.32 11.32L159.03 128l-80 80a8 8 0 0 0 11.31 11.34Z"/></svg>
         </button>
       </slot>
     </div>
@@ -81,8 +85,8 @@
                     :class="getDayClasses(dayObj)"
                     @click="!dayObj.isDisabled && selectDate(dayObj.date)"
                   >
-                     <span class="dp-cell-text">{{ dayObj.label }}</span>
-                     <div v-if="dayObj.eventCount > 0" class="dp-event-dot"></div>
+                      <span class="dp-cell-text">{{ dayObj.label }}</span>
+                      <div v-if="dayObj.eventCount > 0" class="dp-event-dot"></div>
                   </div>
                 </div>
               </div>
@@ -113,8 +117,8 @@
                     :class="getDayClasses(dayObj)"
                     @click="!dayObj.isDisabled && selectDate(dayObj.date)"
                   >
-                     <span class="dp-cell-text">{{ dayObj.label }}</span>
-                     <div v-if="dayObj.eventCount > 0" class="dp-event-dot"></div>
+                      <span class="dp-cell-text">{{ dayObj.label }}</span>
+                      <div v-if="dayObj.eventCount > 0" class="dp-event-dot"></div>
                   </div>
                 </div>
               </div>
@@ -203,10 +207,11 @@ export interface CalendarEvent {
   count?: number
 }
 
+// Updated Interface with dateMode
 export interface DatePickerOptions {
-  mode?: 'date' | 'month' | 'year' // New Mode Prop
-  locale?: string
-  calendar?: 'gregory' | 'persian' | 'islamic'
+  dateMode?: 'georgian' | 'jalaali' | 'islamic'
+  mode?: 'date' | 'month' | 'year' 
+  locale?: string // Optional override
   dir?: 'ltr' | 'rtl'
   minDate?: Date
   maxDate?: Date
@@ -215,7 +220,7 @@ export interface DatePickerOptions {
   enableTimePicker?: boolean
   enableYearPicker?: boolean
   enableMonthPicker?: boolean
-  fixedTime?: boolean | Date | string // Updated Type
+  fixedTime?: boolean | Date | string
   monthOffset?: number
   color?: string
   selectionMode?: 'all' | 'future' | 'past'
@@ -225,6 +230,7 @@ export default defineComponent({
   name: 'DatePicker',
   props: {
     modelValue: { type: [Date, String], default: null },
+    // Restored the single options object prop to match your App.vue usage
     options: {
       type: Object as PropType<DatePickerOptions>,
       default: () => ({})
@@ -232,13 +238,11 @@ export default defineComponent({
   },
   emits: ['update:modelValue'],
   setup(props, { emit }) {
-    // --- Options Merge Logic ---
-    const defaultOptions: Required<Omit<DatePickerOptions, 'minDate'|'maxDate'|'events'|'holidays'|'color'>> & {
-        minDate?: Date; maxDate?: Date; events: CalendarEvent[]; holidays: (Date|string)[]; color: string
-    } = {
+    // Default Options
+    const defaultOptions: DatePickerOptions = {
+      dateMode: 'georgian',
       mode: 'date',
-      locale: 'en',
-      calendar: 'gregory',
+      // Locale will be derived from dateMode if not provided
       dir: 'ltr',
       events: [],
       holidays: [],
@@ -249,16 +253,39 @@ export default defineComponent({
       monthOffset: 0,
       color: '',
       selectionMode: 'all',
-      // optionals
       minDate: undefined,
       maxDate: undefined
     }
 
+    // Merge Props
     const opts = computed(() => ({ ...defaultOptions, ...props.options }))
 
-    // Initialize with safe defaults based on options
-    const now = DateTime.now().reconfigure({ outputCalendar: opts.value.calendar, locale: opts.value.locale })
-    const displayDate = ref<DateTime>(now.plus({ months: opts.value.monthOffset }))
+    // Resolve Luxon Configuration based on dateMode
+    const luxonConfig = computed(() => {
+      const mode = opts.value.dateMode || 'georgian'
+      let outputCalendar = 'gregory'
+      let locale = opts.value.locale || 'en' // Default fallback
+
+      if (mode === 'jalaali') {
+        outputCalendar = 'persian'
+        // Default to Farsi if locale not explicitly set
+        if (!props.options.locale) locale = 'fa' 
+      } else if (mode === 'islamic') {
+        outputCalendar = 'islamic'
+        // Default to Arabic if locale not explicitly set
+        if (!props.options.locale) locale = 'ar'
+      }
+
+      return { outputCalendar, locale }
+    })
+
+    const dir = computed(() => opts.value.dir || (opts.value.dateMode === 'jalaali' || opts.value.dateMode === 'islamic' ? 'rtl' : 'ltr'))
+
+    // Reactive State
+    const now = computed(() => DateTime.now().reconfigure(luxonConfig.value as any))
+    
+    // We need displayDate to be a Ref that we can mutate, but initialized with config
+    const displayDate = ref<DateTime>(DateTime.now().reconfigure(luxonConfig.value as any).plus({ months: opts.value.monthOffset }))
     const selectedDt = ref<DateTime | null>(null)
     const viewMode = ref<'day' | 'month' | 'year'>('day')
     const timeInputs = ref({ hour: '12', minute: '00' })
@@ -267,7 +294,7 @@ export default defineComponent({
     // Animation State
     const isAnimating = ref(false)
     const isSilent = ref(false)
-    const slideOffset = ref(0) // -1 (Next), 0 (Current), 1 (Prev)
+    const slideOffset = ref(0) 
 
     const customVars = computed(() => {
       return opts.value.color ? { '--dp-primary': opts.value.color } : {}
@@ -285,42 +312,150 @@ export default defineComponent({
       else viewMode.value = 'day'
     }, { immediate: true })
 
-    // Fixed Time Logic (Date Parsing)
+    // Reconfigure displayDate when config changes (e.g. switching dateMode)
+    watch(luxonConfig, (newConf) => {
+        // Keep the same point in time, just change calendar system
+        displayDate.value = displayDate.value.reconfigure(newConf as any)
+        if (selectedDt.value) {
+            selectedDt.value = selectedDt.value.reconfigure(newConf as any)
+        }
+    })
+
+    // Fixed Time Logic 
     watch(() => opts.value.fixedTime, (val) => {
-      if (!val || val === true) return // standard boolean check
-      
+      if (!val || val === true) return
       try {
         let dt = val instanceof Date ? DateTime.fromJSDate(val) : DateTime.fromISO(val as string)
         if (dt.isValid) {
-          dt = dt.reconfigure({ outputCalendar: opts.value.calendar, locale: opts.value.locale })
+          dt = dt.reconfigure(luxonConfig.value as any)
           displayDate.value = dt
         }
-      } catch (e) {
-        // silent fail
-      }
+      } catch (e) { /* silent */ }
     }, { immediate: true })
-    
+
+    // --- Boundary Logic ---
+    const minAllowedDate = computed(() => {
+      // Base 'now' for comparison
+      const n = DateTime.now().reconfigure(luxonConfig.value as any)
+      
+      let d = opts.value.minDate ? DateTime.fromJSDate(opts.value.minDate).reconfigure(luxonConfig.value as any) : null
+      
+      if (opts.value.selectionMode === 'future') {
+        const startOfToday = n.startOf('day')
+        // if explicit minDate is set, use the later of the two
+        if (!d || startOfToday > d) d = startOfToday
+      }
+      return d
+    })
+
+    const maxAllowedDate = computed(() => {
+      const n = DateTime.now().reconfigure(luxonConfig.value as any)
+      
+      let d = opts.value.maxDate ? DateTime.fromJSDate(opts.value.maxDate).reconfigure(luxonConfig.value as any) : null
+      
+      if (opts.value.selectionMode === 'past') {
+        const endOfToday = n.endOf('day')
+        // if explicit maxDate is set, use the earlier of the two
+        if (!d || endOfToday < d) d = endOfToday
+      }
+      return d
+    })
+
+    // --- Navigation Guard Logic ---
+    const canGoPrev = computed(() => {
+      if (isFixed.value) return false
+      
+      let targetEnd: DateTime
+      
+      if (viewMode.value === 'day') {
+        targetEnd = displayDate.value.minus({ months: 1 }).endOf('month')
+      } else if (viewMode.value === 'month') {
+        targetEnd = displayDate.value.minus({ years: 1 }).endOf('year')
+      } else {
+        return true
+      }
+
+      if (minAllowedDate.value && targetEnd < minAllowedDate.value) return false
+      return true
+    })
+
+    const canGoNext = computed(() => {
+      if (isFixed.value) return false
+
+      let targetStart: DateTime
+
+      if (viewMode.value === 'day') {
+        targetStart = displayDate.value.plus({ months: 1 }).startOf('month')
+      } else if (viewMode.value === 'month') {
+        targetStart = displayDate.value.plus({ years: 1 }).startOf('year')
+      } else {
+        return true
+      }
+
+      if (maxAllowedDate.value && targetStart > maxAllowedDate.value) return false
+      return true
+    })
+
+    // --- Week Start Calculation Helper ---
+    // Returns the explicit start of the week relative to the basis date
+    // Georgian: Monday Start (ISO 1)
+    // Jalaali/Islamic: Saturday Start (ISO 6)
+    const getStartOfWeek = (basis: DateTime) => {
+      const mode = opts.value.dateMode || 'georgian'
+      
+      if (mode === 'georgian') {
+         // Goal: Monday Start.
+         // Luxon (ISO): 1=Mon, 7=Sun.
+         // To get to Monday (1), we subtract (weekday - 1) days.
+         // e.g. Mon(1) -> -0 days. Tue(2) -> -1 day.
+         return basis.minus({ days: basis.weekday - 1 })
+      } else {
+         // Goal: Saturday Start (Jalaali/Islamic)
+         // Luxon (ISO): 1=Mon, ... 5=Fri, 6=Sat, 7=Sun.
+         // We want Sat(6) to be index 0.
+         // Sat(6) -> offset 0.
+         // Sun(7) -> offset 1.
+         // Mon(1) -> offset 2.
+         // ...
+         // Fri(5) -> offset 6.
+         // Formula: (weekday + 1) % 7
+         const offset = (basis.weekday + 1) % 7
+         return basis.minus({ days: offset })
+      }
+    }
+
     // --- Dynamic Header ---
     const dynamicWeekDays = computed(() => {
       const startOfMonth = displayDate.value.startOf('month')
-      const startGrid = startOfMonth.startOf('week')
+      // Use helper instead of generic startOf('week')
+      const startGrid = getStartOfWeek(startOfMonth)
       
       const headers = []
       for (let i = 0; i < 7; i++) {
         const d = startGrid.plus({ days: i })
-        // Check for Friday (7 in Luxon Persian) ONLY if calendar is Persian
-        const isPersianFri = opts.value.calendar === 'persian' && d.weekday === 7
+        
+        // Determine "Red" day: Friday for Jalaali/Islamic, Sunday for Georgian
+        let isRed = false
+        if (opts.value.dateMode === 'georgian') {
+           // Gregorian: Sunday is holiday (Red)
+           // Luxon Gregorian: 7 is Sunday.
+           isRed = d.weekday === 7
+        } else {
+           // Jalaali/Islamic: Friday is holiday (Red)
+           // Luxon Persian/Islamic: 5 is Friday.
+           isRed = d.weekday === 5
+        }
         
         headers.push({
           label: d.toFormat('ccc'), 
-          isRed: isPersianFri
+          isRed
         })
       }
       return headers
     })
 
     const isHolidayCheck = (dt: DateTime) => {
-      return opts.value.holidays.some(h => {
+      return (opts.value.holidays || []).some(h => {
         const hDt = h instanceof Date ? DateTime.fromJSDate(h) : DateTime.fromISO(h)
         return hDt.hasSame(dt, 'day')
       })
@@ -328,27 +463,28 @@ export default defineComponent({
 
     const generateGrid = (basisDate: DateTime) => {
       const startOfMonth = basisDate.startOf('month')
-      const startGrid = startOfMonth.startOf('week')
+      // Use helper to ensure grid aligns with headers
+      const startGrid = getStartOfWeek(startOfMonth)
       const days = []
       let curr = startGrid
       
-      const currentStartOfDay = now.startOf('day')
-      const currentEndOfDay = now.endOf('day')
+      const n = DateTime.now().reconfigure(luxonConfig.value as any)
+      const currentStartOfDay = n.startOf('day')
+      const currentEndOfDay = n.endOf('day')
 
       for (let i = 0; i < 42; i++) {
-        const eventMatch = opts.value.events.find(e => {
+        const eventMatch = (opts.value.events || []).find(e => {
           const eDate = e.date instanceof Date ? DateTime.fromJSDate(e.date) : DateTime.fromISO(e.date as string)
           return eDate.hasSame(curr, 'day')
         })
 
         const isCurrentMonth = curr.hasSame(basisDate, 'month')
         
-        // Strict Selection Display: Only show selected state if it matches date AND is in the current month view
         const isSelected = selectedDt.value 
           ? (curr.hasSame(selectedDt.value, 'day') && isCurrentMonth) 
           : false
           
-        const isToday = curr.hasSame(now, 'day')
+        const isToday = curr.hasSame(n, 'day')
         
         let isDisabled = false
         
@@ -360,7 +496,7 @@ export default defineComponent({
         if (opts.value.selectionMode === 'future' && curr < currentStartOfDay) isDisabled = true
         if (opts.value.selectionMode === 'past' && curr > currentEndOfDay) isDisabled = true
 
-        // 3. Other Month Restriction (User Requirement: "must not be selectable")
+        // 3. Other Month Restriction
         if (!isCurrentMonth) isDisabled = true
 
         const isHoliday = isHolidayCheck(curr)
@@ -380,90 +516,64 @@ export default defineComponent({
       return days
     }
 
-    // Grid Generation for Sliding
     const currentGrid = computed(() => generateGrid(displayDate.value))
     const prevGrid = computed(() => generateGrid(displayDate.value.minus({ months: 1 })))
     const nextGrid = computed(() => generateGrid(displayDate.value.plus({ months: 1 })))
 
-    // --- Slider Style Logic ---
+    // --- Slider Style Logic (RTL Fixed) ---
     const sliderStyle = computed(() => {
-      let base = -33.333333
+      const isRTL = dir.value === 'rtl'
+      
+      // LTR: Base -33% (Middle). Next (-1) -> -66% (Left). Prev (1) -> 0% (Right).
+      // RTL: Base +33% (Middle). Next (-1) -> +66% (Left?). Prev (1) -> 0% (Right).
+      
+      let base = isRTL ? 33.333333 : -33.333333
       let move = 0
       
       if (isAnimating.value) {
-        if (slideOffset.value === 1) move = 33.333333  // Show Prev
-        if (slideOffset.value === -1) move = -33.333333 // Show Next
+        if (slideOffset.value === 1) {
+           // Prev
+           move = isRTL ? -33.333333 : 33.333333
+        }
+        if (slideOffset.value === -1) {
+           // Next
+           move = isRTL ? 33.333333 : -33.333333
+        }
       }
-
-      return {
-        transform: `translateX(${base + move}%)`
-      }
+      return { transform: `translateX(${base + move}%)` }
     })
 
     const triggerSlide = (dir: 'next' | 'prev') => {
       if (isAnimating.value) return
+      if (dir === 'next' && !canGoNext.value) return
+      if (dir === 'prev' && !canGoPrev.value) return
       isAnimating.value = true
-      
-      // Logic for LTR
-      if (dir === 'next') slideOffset.value = -1 
-      else slideOffset.value = 1
+      slideOffset.value = dir === 'next' ? -1 : 1
     }
 
     const onTransitionEnd = async (e: Event) => {
       if (e.target !== e.currentTarget) return
-      
       if (!isAnimating.value) return
-      
-      // 1. Enter Silent Mode
       isSilent.value = true
-
-      // 2. Update data
-      if (slideOffset.value === -1) {
-        displayDate.value = displayDate.value.plus({ months: 1 })
-      } else if (slideOffset.value === 1) {
-        displayDate.value = displayDate.value.minus({ months: 1 })
-      }
-      
-      // 3. Reset Slider
+      if (slideOffset.value === -1) displayDate.value = displayDate.value.plus({ months: 1 })
+      else if (slideOffset.value === 1) displayDate.value = displayDate.value.minus({ months: 1 })
       isAnimating.value = false
       slideOffset.value = 0
-      
-      // 4. Wait for DOM
       await nextTick()
-
-      // 5. Re-enable transitions
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-           isSilent.value = false
-        })
-      })
+      requestAnimationFrame(() => { requestAnimationFrame(() => { isSilent.value = false }) })
     }
 
     const handleNavigation = (dir: 'prev' | 'next') => {
-      // 1. Year Mode: Buttons should be hidden visually (scale 0), so we ignore clicks just in case
       if (viewMode.value === 'year') return 
+      if (dir === 'prev' && !canGoPrev.value) return
+      if (dir === 'next' && !canGoNext.value) return
 
-      // 2. Month Mode: Navigation changes the year
       if (viewMode.value === 'month') {
         const amount = dir === 'next' ? 1 : -1
         displayDate.value = displayDate.value.plus({ years: amount })
-      } 
-      // 3. Day Mode: Triggers standard sliding animation
-      else {
+      } else {
         triggerSlide(dir)
       }
-    }
-
-    const handlePrev = () => {
-      if (viewMode.value === 'day') triggerSlide('prev')
-      else if (viewMode.value === 'year') displayDate.value = displayDate.value.minus({ years: 12 })
-      else displayDate.value = displayDate.value.minus({ years: 1 })
-    }
-
-    const handleNext = () => {
-      if (viewMode.value === 'day') triggerSlide('next')
-      else if (viewMode.value === 'year') displayDate.value = displayDate.value.plus({ years: 12 })
-      else displayDate.value = displayDate.value.plus({ years: 1 })
     }
 
     // --- Time & Selection Logic ---
@@ -475,27 +585,19 @@ export default defineComponent({
     }
 
     const selectMonth = (month: number) => { 
-      // Update month
       displayDate.value = displayDate.value.set({ month })
-      
-      // If mode is strict month picker, emit and stay
       if (opts.value.mode === 'month') {
         emitUpdate(displayDate.value)
       } else {
-        // Otherwise drill down
         viewMode.value = 'day'
       }
     }
 
     const selectYear = (year: number) => { 
-      // Update year
       displayDate.value = displayDate.value.set({ year })
-      
-      // If mode is strict year picker, emit and stay
       if (opts.value.mode === 'year') {
         emitUpdate(displayDate.value)
       } else {
-        // Otherwise drill down
         viewMode.value = 'month'
       }
     }
@@ -519,7 +621,7 @@ export default defineComponent({
        if(!val) return null
        try {
          let dt = val instanceof Date ? DateTime.fromJSDate(val) : DateTime.fromISO(val)
-         return dt.isValid ? dt.reconfigure({ outputCalendar: opts.value.calendar, locale: opts.value.locale }) : null
+         return dt.isValid ? dt.reconfigure(luxonConfig.value as any) : null
        } catch {
          return null
        }
@@ -532,16 +634,14 @@ export default defineComponent({
 
     // --- Computed Lists ---
     const monthsList = computed(() => {
-      const months = Info.months('long', { locale: opts.value.locale, outputCalendar: opts.value.calendar })
+      const months = Info.months('long', { locale: luxonConfig.value.locale, outputCalendar: luxonConfig.value.outputCalendar as any })
       return months.map((m, i) => ({
-        label: m, value: i + 1, isCurrent: (i + 1) === now.month && displayDate.value.year === now.year
+        label: m, value: i + 1, isCurrent: (i + 1) === now.value.month && displayDate.value.year === now.value.year
       }))
     })
 
     const yearsList = computed(() => {
-      // User Req: "render the previous 100 years and the next 20 years"
-      // We base this on the CURRENT real time year, as "previous" usually implies history from today.
-      const currentRealYear = now.year
+      const currentRealYear = now.value.year
       const start = currentRealYear - 100
       const end = currentRealYear + 20
       const years = []
@@ -556,30 +656,19 @@ export default defineComponent({
         selectedDt.value = parsed
         timeInputs.value.hour = parsed.hour.toString().padStart(2, '0')
         timeInputs.value.minute = parsed.minute.toString().padStart(2, '0')
-        // Only sync displayDate if NOT fixed time, NOT offset, and different month
         if (!opts.value.fixedTime && !opts.value.monthOffset) {
            if (!parsed.hasSame(displayDate.value, 'month')) displayDate.value = parsed
         }
       } else {
-        selectedDt.value = null // Safe clear if null passed
+        selectedDt.value = null 
       }
     }, { immediate: true })
 
-    watch([() => opts.value.locale, () => opts.value.calendar], ([newLoc, newCal]) => {
-      if (selectedDt.value) selectedDt.value = selectedDt.value.reconfigure({ locale: newLoc, outputCalendar: newCal })
-      displayDate.value = displayDate.value.reconfigure({ locale: newLoc, outputCalendar: newCal })
-    })
-
     const onViewSwitch = () => {
       if (viewMode.value === 'year') {
-         const targetYear = selectedDt.value ? selectedDt.value.year : now.year
+         const targetYear = selectedDt.value ? selectedDt.value.year : now.value.year
          let el = yearGridRef.value?.querySelector(`[data-year="${targetYear}"]`)
-         
-         if (!el) {
-            // Fallback to current year if selected is not in range
-            el = yearGridRef.value?.querySelector(`[data-year="${now.year}"]`)
-         }
-
+         if (!el) el = yearGridRef.value?.querySelector(`[data-year="${now.value.year}"]`)
          el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
       }
     }
@@ -595,10 +684,10 @@ export default defineComponent({
     return {
       now, viewMode, displayDate, selectedDt, currentYear, currentMonthName,
       dynamicWeekDays, prevGrid, currentGrid, nextGrid, monthsList, yearsList, timeInputs, customVars,
-      canSwitchView, yearGridRef, handlePrev, handleNext, selectDate, selectMonth, selectYear,
+      canSwitchView, yearGridRef, handleNavigation, selectDate, selectMonth, selectYear,
       updateTime, validateTime, getDayClasses, 
-      sliderStyle, isAnimating, onTransitionEnd, triggerSlide, isSilent, opts, onViewSwitch, handleNavigation,
-      isFixed
+      sliderStyle, isAnimating, onTransitionEnd, triggerSlide, isSilent, onViewSwitch,
+      isFixed, opts, canGoPrev, canGoNext, dir
     }
   }
 })
@@ -616,10 +705,7 @@ export default defineComponent({
   max-width: var(--dp-width) !important;
   
   background: var(--dp-bg);
-  /* No radius, no shadow */
-  /* border-radius: var(--dp-radius); */
   box-shadow: var(--dp-shadow);
-  /* border: 1px solid var(--dp-border); */
   color: var(--dp-text);
   font-family: var(--dp-font-family);
   user-select: none;
@@ -654,7 +740,12 @@ export default defineComponent({
   justify-content: center;
   transition: var(--dp-transition);
 }
-.dp-nav-btn:hover { background: var(--dp-hover-bg); color: var(--dp-text); }
+.dp-nav-btn:hover:not(:disabled) { background: var(--dp-hover-bg); color: var(--dp-text); }
+.dp-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 
 .dp-title-group { display: flex; gap: 4px; }
 .dp-title-btn {
@@ -704,7 +795,6 @@ export default defineComponent({
   color: var(--dp-text-muted);
   padding: 8px 0;
   width: var(--dp-cell-size);
-  /* Removed transition here, added to .dp-allow-transitions below */
   transition: none;
 }
 .dp-weekday.is-holiday-header {
@@ -760,13 +850,11 @@ export default defineComponent({
   font-size: var(--dp-font-size);
   font-weight: var(--dp-weight-medium);
   position: relative;
-  /* Removed transition here, added to .dp-allow-transitions below */
   transition: none;
   border: 1px solid transparent; 
   box-sizing: border-box;
 }
 
-/* === KEY FIX: Only allow transitions when we are NOT sliding/resetting === */
 .dp-allow-transitions .dp-cell,
 .dp-allow-transitions .dp-weekday,
 .dp-allow-transitions .dp-option-cell {
@@ -792,10 +880,6 @@ export default defineComponent({
   font-weight: var(--dp-weight-bold);
 }
 
-/* Holiday text color REMOVED for cells, only dots used */
-.dp-cell.is-holiday:not(.is-selected) {
-  /* color: var(--dp-holiday-text); */
-}
 .dp-cell.is-selected.is-holiday {
   color: var(--dp-primary-text);
 }
@@ -843,7 +927,6 @@ export default defineComponent({
   cursor: pointer;
   font-size: 0.9rem;
   font-weight: var(--dp-weight-medium);
-  /* Removed transition here, added to .dp-allow-transitions above */
   transition: none;
   border: 1px solid transparent;
 }
