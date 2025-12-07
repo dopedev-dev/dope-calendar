@@ -25,7 +25,7 @@
 
         <button class="dp-title-btn" @click="canSwitchView && (viewMode = 'year')"
           :disabled="isFixed || !opts.enableYearPicker" type="button">
-          {{ currentYear }}
+          {{ options.locale && options.locale === 'fa' ? toPersianNum(displayYear) : displayYear }}
         </button>
       </div>
 
@@ -119,11 +119,11 @@
         <!-- Year View -->
         <div v-else-if="viewMode === 'year'" class="dp-view-year" key="year">
           <div class="dp-year-grid" ref="yearGridRef">
-            <div v-for="year in yearsList" :key="year" class="dp-option-cell" :data-year="year" :class="{
-              'is-selected': year === displayDate.year,
-              'is-current': year === now.year
-            }" @click="selectYear(year)">
-              {{ year }}
+            <div v-for="year in yearsList" :key="year.value" :data-year="year.value" class="dp-option-cell" :class="{
+              'is-selected': year.value === selectedYear,
+              'is-current': year.isCurrent
+            }" @click="selectYear(year.value)">
+              {{ year.label }}
             </div>
           </div>
         </div>
@@ -269,7 +269,20 @@ export default defineComponent({
 
     const isFixed = computed(() => !!opts.value.fixedTime)
     const canSwitchView = computed(() => !isFixed.value)
-    const currentMonthName = computed(() => displayDate.value.toFormat('MMMM'))
+    const currentMonthName = computed(() => {
+      const mode = resolvedMode.value
+
+      if (mode === 'jalaali') {
+        const jalaaliMonths = [
+          'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
+          'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'
+        ]
+        const jd = jalaali.toJalaali(displayDate.value.toJSDate())
+        return jalaaliMonths[jd.jm - 1] || ''
+      } else {
+        return displayDate.value.toFormat('MMMM', { locale: luxonConfig.value.locale })
+      }
+    })
     const currentYear = computed(() => displayDate.value.toFormat('yyyy'))
 
     // Initialize View Mode based on Mode Prop
@@ -699,7 +712,22 @@ export default defineComponent({
     }
 
     const selectMonth = (month: number) => {
-      displayDate.value = displayDate.value.set({ month })
+      const mode = resolvedMode.value
+
+      if (mode === 'jalaali') {
+        // Convert the selected Jalaali month back to Georgian for displayDate
+        // We need to set a date in the selected Jalaali month
+        const currentJd = jalaali.toJalaali(displayDate.value.toJSDate())
+        const georgianDate = jalaali.toGregorian(currentJd.jy, month, 1)
+        displayDate.value = DateTime.fromObject({
+          year: georgianDate.gy,
+          month: georgianDate.gm,
+          day: georgianDate.gd,
+        })
+      } else {
+        displayDate.value = displayDate.value.set({ month })
+      }
+
       if (opts.value.mode === 'month') {
         emitUpdate(displayDate.value)
       } else {
@@ -708,13 +736,28 @@ export default defineComponent({
     }
 
     const selectYear = (year: number) => {
-      displayDate.value = displayDate.value.set({ year })
+      const mode = resolvedMode.value
+
+      if (mode === 'jalaali') {
+        // Convert the selected Jalaali year back to Georgian for displayDate
+        // We need to set a date in the selected Jalaali year
+        const georgianDate = jalaali.toGregorian(year, 1, 1)
+        displayDate.value = DateTime.fromObject({
+          year: georgianDate.gy,
+          month: georgianDate.gm,
+          day: georgianDate.gd,
+        })
+      } else {
+        displayDate.value = displayDate.value.set({ year })
+      }
+
       if (opts.value.mode === 'year') {
         emitUpdate(displayDate.value)
       } else {
         viewMode.value = 'month'
       }
     }
+
     const toPersianNum = (n: number | string): string => {
       return String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]!)
     }
@@ -770,19 +813,99 @@ export default defineComponent({
 
     // --- Computed Lists ---
     const monthsList = computed(() => {
-      const months = Info.months('long', { locale: luxonConfig.value.locale, outputCalendar: luxonConfig.value.outputCalendar as any })
-      return months.map((m, i) => ({
-        label: m, value: i + 1, isCurrent: (i + 1) === now.value.month && displayDate.value.year === now.value.year
-      }))
+      const mode = resolvedMode.value
+
+      if (mode === 'jalaali') {
+        // Jalaali month names
+        const jalaaliMonths = [
+          'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
+          'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'
+        ]
+
+        const jd = jalaali.toJalaali(displayDate.value.toJSDate())
+        const currentJalaaliMonth = jd.jm
+        const currentJalaaliYear = jd.jy
+
+        const nowJd = jalaali.toJalaali(now.value.toJSDate())
+
+        return jalaaliMonths.map((m, i) => ({
+          label: m,
+          value: i + 1,
+          isCurrent: (i + 1) === nowJd.jm && currentJalaaliYear === nowJd.jy
+        }))
+      } else {
+        const months = Info.months('long', { locale: luxonConfig.value.locale, outputCalendar: luxonConfig.value.outputCalendar as any })
+        return months.map((m, i) => ({
+          label: m,
+          value: i + 1,
+          isCurrent: (i + 1) === now.value.month && displayDate.value.year === now.value.year
+        }))
+      }
     })
 
+
     const yearsList = computed(() => {
-      const currentRealYear = now.value.year
-      const start = currentRealYear - 100
-      const end = currentRealYear + 20
-      const years = []
-      for (let y = start; y <= end; y++) { years.push(y) }
+      const mode = resolvedMode.value
+
+      let years: Array<{ value: number; label: string; isCurrent: boolean }> = []
+
+      if (mode === 'jalaali') {
+        // Convert displayDate to Jalaali year
+        const jd = jalaali.toJalaali(displayDate.value.toJSDate())
+        const jalaaliYear = jd.jy
+
+        // Generate Jalaali years (e.g., 1390-1420)
+        const startYear = jalaaliYear - 10
+        const endYear = jalaaliYear + 10
+
+        for (let y = startYear; y <= endYear; y++) {
+          const label = opts.value.locale === 'fa' ? toPersianNum(y) : String(y)
+          years.push({
+            value: y,
+            label,
+            isCurrent: y === jalaaliYear
+          })
+        }
+      } else {
+        // Georgian or Islamic - use gregorian year
+        const startYear = displayDate.value.year - 10
+        const endYear = displayDate.value.year + 10
+
+        for (let y = startYear; y <= endYear; y++) {
+          const label = opts.value.locale === 'fa' ? toPersianNum(y) : String(y)
+          years.push({
+            value: y,
+            label,
+            isCurrent: y === displayDate.value.year
+          })
+        }
+      }
+
       return years
+    })
+
+    const displayYear = computed(() => {
+      const mode = resolvedMode.value
+
+      if (mode === 'jalaali') {
+        const jd = jalaali.toJalaali(displayDate.value.toJSDate())
+        return jd.jy
+      } else {
+        return displayDate.value.year
+      }
+    })
+
+    const selectedYear = computed(() => {
+      if (!selectedDt.value) return null
+
+      const mode = resolvedMode.value
+
+      if (mode === 'jalaali') {
+        const jd = jalaali.toJalaali(selectedDt.value.toJSDate())
+        return jd.jy
+      } else {
+        return selectedDt.value.year
+      }
     })
 
     // Watchers
@@ -802,9 +925,27 @@ export default defineComponent({
 
     const onViewSwitch = () => {
       if (viewMode.value === 'year') {
-        const targetYear = selectedDt.value ? selectedDt.value.year : now.value.year
+        const mode = resolvedMode.value
+        let targetYear = selectedDt.value ? selectedDt.value.year : now.value.year
+
+        // Convert to Jalaali year if needed
+        if (mode === 'jalaali' && selectedDt.value) {
+          const jd = jalaali.toJalaali(selectedDt.value.toJSDate())
+          targetYear = jd.jy
+        } else if (mode === 'jalaali' && !selectedDt.value) {
+          const jd = jalaali.toJalaali(now.value.toJSDate())
+          targetYear = jd.jy
+        }
+
         let el = yearGridRef.value?.querySelector(`[data-year="${targetYear}"]`)
-        if (!el) el = yearGridRef.value?.querySelector(`[data-year="${now.value.year}"]`)
+        if (!el) {
+          let fallbackYear = now.value.year
+          if (mode === 'jalaali') {
+            const jd = jalaali.toJalaali(now.value.toJSDate())
+            fallbackYear = jd.jy
+          }
+          el = yearGridRef.value?.querySelector(`[data-year="${fallbackYear}"]`)
+        }
         el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
       }
     }
@@ -818,6 +959,7 @@ export default defineComponent({
     })
 
     return {
+      displayYear, selectedYear, toPersianNum,
       now, viewMode, displayDate, selectedDt, currentYear, currentMonthName,
       dynamicWeekDays, prevGrid, currentGrid, nextGrid, monthsList, yearsList, timeInputs, customVars,
       canSwitchView, yearGridRef, handleNavigation, selectDate, selectMonth, selectYear,
