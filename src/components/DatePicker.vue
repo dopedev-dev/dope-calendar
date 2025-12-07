@@ -1,51 +1,45 @@
 <template>
-  <div class="dope-date-picker" :class="{ 'dp-allow-transitions': !isAnimating && !isSilent }" :dir="dir" :style="customVars">
+  <div class="dope-date-picker" :class="{ 'dp-allow-transitions': !isAnimating && !isSilent }" :dir="dir"
+    :style="customVars">
     <!-- Header -->
     <div class="dp-header">
       <slot name="prev" :trigger="() => canGoPrev && handleNavigation('prev')" :disabled="!canGoPrev" v-if="!isFixed">
-        <button 
-          class="dp-nav-btn" 
-          :class="{ 'dp-nav-hide': viewMode === 'year' }"
-          @click="handleNavigation('prev')" 
-          :disabled="!canGoPrev"
-          type="button"
-        >
-          <svg v-if="dir === 'rtl'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256"><path fill="currentColor" d="m90.34 202.34l80-80a8 8 0 0 0 0-11.32l-80-80a8 8 0 0 0-11.32 11.32L159.03 128l-80 80a8 8 0 0 0 11.31 11.34Z"/></svg>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256"><path fill="currentColor" d="M165.66 202.34a8 8 0 0 1-11.32 11.32l-80-80a8 8 0 0 1 0-11.32l80-80a8 8 0 0 1 11.32 11.32L96.97 128Z"/></svg>
+        <button class="dp-nav-btn" :class="{ 'dp-nav-hide': viewMode === 'year' }" @click="handleNavigation('prev')"
+          :disabled="!canGoPrev" type="button">
+          <svg v-if="dir === 'rtl'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256">
+            <path fill="currentColor"
+              d="m90.34 202.34l80-80a8 8 0 0 0 0-11.32l-80-80a8 8 0 0 0-11.32 11.32L159.03 128l-80 80a8 8 0 0 0 11.31 11.34Z" />
+          </svg>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256">
+            <path fill="currentColor"
+              d="M165.66 202.34a8 8 0 0 1-11.32 11.32l-80-80a8 8 0 0 1 0-11.32l80-80a8 8 0 0 1 11.32 11.32L96.97 128Z" />
+          </svg>
         </button>
       </slot>
-      
+
       <div class="dp-title-group">
-        <button 
-          v-if="viewMode === 'day'" 
-          class="dp-title-btn" 
-          @click="canSwitchView && (viewMode = 'month')"
-          :disabled="isFixed || !opts.enableMonthPicker"
-          type="button"
-        >
+        <button v-if="viewMode === 'day'" class="dp-title-btn" @click="canSwitchView && (viewMode = 'month')"
+          :disabled="isFixed || !opts.enableMonthPicker" type="button">
           {{ currentMonthName }}
         </button>
-        
-        <button 
-          class="dp-title-btn" 
-          @click="canSwitchView && (viewMode = 'year')"
-          :disabled="isFixed || !opts.enableYearPicker"
-          type="button"
-        >
+
+        <button class="dp-title-btn" @click="canSwitchView && (viewMode = 'year')"
+          :disabled="isFixed || !opts.enableYearPicker" type="button">
           {{ currentYear }}
         </button>
       </div>
 
       <slot name="next" :trigger="() => canGoNext && handleNavigation('next')" :disabled="!canGoNext" v-if="!isFixed">
-        <button 
-          class="dp-nav-btn" 
-          :class="{ 'dp-nav-hide': viewMode === 'year' }"
-          @click="handleNavigation('next')" 
-          :disabled="!canGoNext"
-          type="button"
-        >
-          <svg v-if="dir === 'rtl'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256"><path fill="currentColor" d="M165.66 202.34a8 8 0 0 1-11.32 11.32l-80-80a8 8 0 0 1 0-11.32l80-80a8 8 0 0 1 11.32 11.32L96.97 128Z"/></svg>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256"><path fill="currentColor" d="m90.34 202.34l80-80a8 8 0 0 0 0-11.32l-80-80a8 8 0 0 0-11.32 11.32L159.03 128l-80 80a8 8 0 0 0 11.31 11.34Z"/></svg>
+        <button class="dp-nav-btn" :class="{ 'dp-nav-hide': viewMode === 'year' }" @click="handleNavigation('next')"
+          :disabled="!canGoNext" type="button">
+          <svg v-if="dir === 'rtl'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256">
+            <path fill="currentColor"
+              d="M165.66 202.34a8 8 0 0 1-11.32 11.32l-80-80a8 8 0 0 1 0-11.32l80-80a8 8 0 0 1 11.32 11.32L96.97 128Z" />
+          </svg>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 256 256">
+            <path fill="currentColor"
+              d="m90.34 202.34l80-80a8 8 0 0 0 0-11.32l-80-80a8 8 0 0 0-11.32 11.32L159.03 128l-80 80a8 8 0 0 0 11.31 11.34Z" />
+          </svg>
         </button>
       </slot>
     </div>
@@ -53,40 +47,29 @@
     <!-- Body Viewport -->
     <div class="dp-body">
       <Transition name="dp-fade" mode="out-in" @after-enter="onViewSwitch">
-        
+
         <!-- Day View (Sliding Carousel) -->
         <div v-if="viewMode === 'day'" class="dp-viewport" key="day">
-          
+
           <!-- Static Header -->
           <div class="dp-weekdays">
-            <div 
-              v-for="(day, index) in dynamicWeekDays" 
-              :key="index" 
-              class="dp-weekday"
-              :class="{ 'is-holiday-header': day.isRed }"
-            >
+            <div v-for="(day, index) in dynamicWeekDays" :key="index" class="dp-weekday"
+              :class="{ 'is-holiday-header': day.isRed }">
               {{ day.label }}
             </div>
           </div>
 
           <!-- Slider (300% width) -->
-          <div 
-            class="dp-slider" 
-            :class="{ 'is-animating': isAnimating }"
-            :style="sliderStyle"
-            @transitionend="onTransitionEnd"
-          >
+          <div class="dp-slider" :class="{ 'is-animating': isAnimating }" :style="sliderStyle"
+            @transitionend="onTransitionEnd">
             <!-- Previous Month -->
             <div class="dp-slide-pane">
               <div class="dp-grid">
-                <div v-for="(dayObj, i) in prevGrid" :key="'p'+i" class="dp-cell-wrapper">
-                  <div 
-                    class="dp-cell" 
-                    :class="getDayClasses(dayObj)"
-                    @click="!dayObj.isDisabled && selectDate(dayObj.date)"
-                  >
-                      <span class="dp-cell-text">{{ dayObj.label }}</span>
-                      <div v-if="dayObj.eventCount > 0" class="dp-event-dot"></div>
+                <div v-for="(dayObj, i) in prevGrid" :key="'p' + i" class="dp-cell-wrapper">
+                  <div class="dp-cell" :class="getDayClasses(dayObj)"
+                    @click="!dayObj.isDisabled && selectDate(dayObj.date)">
+                    <span class="dp-cell-text">{{ dayObj.label }}</span>
+                    <div v-if="dayObj.eventCount > 0" class="dp-event-dot"></div>
                   </div>
                 </div>
               </div>
@@ -95,12 +78,9 @@
             <!-- Current Month -->
             <div class="dp-slide-pane">
               <div class="dp-grid">
-                <div v-for="(dayObj, i) in currentGrid" :key="'c'+i" class="dp-cell-wrapper">
-                  <div 
-                    class="dp-cell" 
-                    :class="getDayClasses(dayObj)"
-                    @click="!dayObj.isDisabled && selectDate(dayObj.date)"
-                  >
+                <div v-for="(dayObj, i) in currentGrid" :key="'c' + i" class="dp-cell-wrapper">
+                  <div class="dp-cell" :class="getDayClasses(dayObj)"
+                    @click="!dayObj.isDisabled && selectDate(dayObj.date)">
                     <span class="dp-cell-text">{{ dayObj.label }}</span>
                     <div v-if="dayObj.eventCount > 0" class="dp-event-dot"></div>
                   </div>
@@ -111,14 +91,11 @@
             <!-- Next Month -->
             <div class="dp-slide-pane">
               <div class="dp-grid">
-                <div v-for="(dayObj, i) in nextGrid" :key="'n'+i" class="dp-cell-wrapper">
-                  <div 
-                    class="dp-cell" 
-                    :class="getDayClasses(dayObj)"
-                    @click="!dayObj.isDisabled && selectDate(dayObj.date)"
-                  >
-                      <span class="dp-cell-text">{{ dayObj.label }}</span>
-                      <div v-if="dayObj.eventCount > 0" class="dp-event-dot"></div>
+                <div v-for="(dayObj, i) in nextGrid" :key="'n' + i" class="dp-cell-wrapper">
+                  <div class="dp-cell" :class="getDayClasses(dayObj)"
+                    @click="!dayObj.isDisabled && selectDate(dayObj.date)">
+                    <span class="dp-cell-text">{{ dayObj.label }}</span>
+                    <div v-if="dayObj.eventCount > 0" class="dp-event-dot"></div>
                   </div>
                 </div>
               </div>
@@ -130,16 +107,10 @@
         <!-- Month View -->
         <div v-else-if="viewMode === 'month'" class="dp-view-month" key="month">
           <div class="dp-month-grid">
-            <div 
-              v-for="(m, index) in monthsList" 
-              :key="index"
-              class="dp-option-cell"
-              :class="{
-                'is-selected': m.value === displayDate.month,
-                'is-current': m.isCurrent
-              }"
-              @click="selectMonth(m.value)"
-            >
+            <div v-for="(m, index) in monthsList" :key="index" class="dp-option-cell" :class="{
+              'is-selected': m.value === displayDate.month,
+              'is-current': m.isCurrent
+            }" @click="selectMonth(m.value)">
               {{ m.label }}
             </div>
           </div>
@@ -148,17 +119,10 @@
         <!-- Year View -->
         <div v-else-if="viewMode === 'year'" class="dp-view-year" key="year">
           <div class="dp-year-grid" ref="yearGridRef">
-            <div 
-              v-for="year in yearsList" 
-              :key="year"
-              class="dp-option-cell"
-              :data-year="year"
-              :class="{
-                'is-selected': year === displayDate.year,
-                'is-current': year === now.year
-              }"
-              @click="selectYear(year)"
-            >
+            <div v-for="year in yearsList" :key="year" class="dp-option-cell" :data-year="year" :class="{
+              'is-selected': year === displayDate.year,
+              'is-current': year === now.year
+            }" @click="selectYear(year)">
               {{ year }}
             </div>
           </div>
@@ -172,25 +136,15 @@
       <div class="dp-time-wrapper">
         <div class="dp-time-col">
           <button class="dp-icon-btn" @click="updateTime(1, 'hour')" type="button">▲</button>
-          <input 
-            class="dp-time-input" 
-            type="text" 
-            v-model="timeInputs.hour" 
-            @blur="validateTime('hour')"
-            @keydown.enter="validateTime('hour')"
-          />
+          <input class="dp-time-input" type="text" v-model="timeInputs.hour" @blur="validateTime('hour')"
+            @keydown.enter="validateTime('hour')" />
           <button class="dp-icon-btn" @click="updateTime(-1, 'hour')" type="button">▼</button>
         </div>
         <span class="dp-time-sep">:</span>
         <div class="dp-time-col">
           <button class="dp-icon-btn" @click="updateTime(1, 'minute')" type="button">▲</button>
-          <input 
-            class="dp-time-input" 
-            type="text" 
-            v-model="timeInputs.minute" 
-            @blur="validateTime('minute')"
-            @keydown.enter="validateTime('minute')"
-          />
+          <input class="dp-time-input" type="text" v-model="timeInputs.minute" @blur="validateTime('minute')"
+            @keydown.enter="validateTime('minute')" />
           <button class="dp-icon-btn" @click="updateTime(-1, 'minute')" type="button">▼</button>
         </div>
       </div>
@@ -199,8 +153,9 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, computed, watch, nextTick, type PropType } from 'vue'
+import { defineComponent, ref, computed, watch, nextTick, type PropType, onMounted } from 'vue'
 import { DateTime, Info } from 'luxon'
+import * as jalaali from 'jalaali-js'
 
 export interface CalendarEvent {
   date: Date | string
@@ -210,7 +165,8 @@ export interface CalendarEvent {
 // Updated Interface with dateMode
 export interface DatePickerOptions {
   dateMode?: 'georgian' | 'jalaali' | 'islamic'
-  mode?: 'date' | 'month' | 'year' 
+  calendar?: 'gregory' | 'persian' | 'islamic' // Added backward compat for App.vue
+  mode?: 'date' | 'month' | 'year'
   locale?: string // Optional override
   dir?: 'ltr' | 'rtl'
   minDate?: Date
@@ -240,7 +196,7 @@ export default defineComponent({
   setup(props, { emit }) {
     // Default Options
     const defaultOptions: DatePickerOptions = {
-      dateMode: 'georgian',
+      // FIX 1: Removed 'dateMode: georgian' from default so it doesn't shadow props.options.calendar
       mode: 'date',
       // Locale will be derived from dateMode if not provided
       dir: 'ltr',
@@ -260,16 +216,27 @@ export default defineComponent({
     // Merge Props
     const opts = computed(() => ({ ...defaultOptions, ...props.options }))
 
+    // Helper to resolve the effective mode (handles both dateMode and calendar props)
+    const resolvedMode = computed(() => {
+      // If dateMode is explicitly passed, it takes precedence
+      if (opts.value.dateMode) return opts.value.dateMode
+      // Fallback to legacy calendar prop
+      if (opts.value.calendar === 'persian') return 'jalaali'
+      if (opts.value.calendar === 'islamic') return 'islamic'
+      // Default fallback
+      return 'georgian'
+    })
+
     // Resolve Luxon Configuration based on dateMode
     const luxonConfig = computed(() => {
-      const mode = opts.value.dateMode || 'georgian'
+      const mode = resolvedMode.value
       let outputCalendar = 'gregory'
       let locale = opts.value.locale || 'en' // Default fallback
 
       if (mode === 'jalaali') {
         outputCalendar = 'persian'
         // Default to Farsi if locale not explicitly set
-        if (!props.options.locale) locale = 'fa' 
+        if (!props.options.locale) locale = 'fa'
       } else if (mode === 'islamic') {
         outputCalendar = 'islamic'
         // Default to Arabic if locale not explicitly set
@@ -279,22 +246,22 @@ export default defineComponent({
       return { outputCalendar, locale }
     })
 
-    const dir = computed(() => opts.value.dir || (opts.value.dateMode === 'jalaali' || opts.value.dateMode === 'islamic' ? 'rtl' : 'ltr'))
+    const dir = computed(() => opts.value.dir || (resolvedMode.value === 'jalaali' || resolvedMode.value === 'islamic' ? 'rtl' : 'ltr'))
 
     // Reactive State
     const now = computed(() => DateTime.now().reconfigure(luxonConfig.value as any))
-    
+
     // We need displayDate to be a Ref that we can mutate, but initialized with config
     const displayDate = ref<DateTime>(DateTime.now().reconfigure(luxonConfig.value as any).plus({ months: opts.value.monthOffset }))
     const selectedDt = ref<DateTime | null>(null)
     const viewMode = ref<'day' | 'month' | 'year'>('day')
     const timeInputs = ref({ hour: '12', minute: '00' })
     const yearGridRef = ref<HTMLElement | null>(null)
-    
+
     // Animation State
     const isAnimating = ref(false)
     const isSilent = ref(false)
-    const slideOffset = ref(0) 
+    const slideOffset = ref(0)
 
     const customVars = computed(() => {
       return opts.value.color ? { '--dp-primary': opts.value.color } : {}
@@ -314,11 +281,11 @@ export default defineComponent({
 
     // Reconfigure displayDate when config changes (e.g. switching dateMode)
     watch(luxonConfig, (newConf) => {
-        // Keep the same point in time, just change calendar system
-        displayDate.value = displayDate.value.reconfigure(newConf as any)
-        if (selectedDt.value) {
-            selectedDt.value = selectedDt.value.reconfigure(newConf as any)
-        }
+      // Keep the same point in time, just change calendar system
+      displayDate.value = displayDate.value.reconfigure(newConf as any)
+      if (selectedDt.value) {
+        selectedDt.value = selectedDt.value.reconfigure(newConf as any)
+      }
     })
 
     // Fixed Time Logic 
@@ -337,9 +304,9 @@ export default defineComponent({
     const minAllowedDate = computed(() => {
       // Base 'now' for comparison
       const n = DateTime.now().reconfigure(luxonConfig.value as any)
-      
+
       let d = opts.value.minDate ? DateTime.fromJSDate(opts.value.minDate).reconfigure(luxonConfig.value as any) : null
-      
+
       if (opts.value.selectionMode === 'future') {
         const startOfToday = n.startOf('day')
         // if explicit minDate is set, use the later of the two
@@ -350,9 +317,9 @@ export default defineComponent({
 
     const maxAllowedDate = computed(() => {
       const n = DateTime.now().reconfigure(luxonConfig.value as any)
-      
+
       let d = opts.value.maxDate ? DateTime.fromJSDate(opts.value.maxDate).reconfigure(luxonConfig.value as any) : null
-      
+
       if (opts.value.selectionMode === 'past') {
         const endOfToday = n.endOf('day')
         // if explicit maxDate is set, use the earlier of the two
@@ -364,9 +331,9 @@ export default defineComponent({
     // --- Navigation Guard Logic ---
     const canGoPrev = computed(() => {
       if (isFixed.value) return false
-      
+
       let targetEnd: DateTime
-      
+
       if (viewMode.value === 'day') {
         targetEnd = displayDate.value.minus({ months: 1 }).endOf('month')
       } else if (viewMode.value === 'month') {
@@ -397,57 +364,57 @@ export default defineComponent({
     })
 
     // --- Week Start Calculation Helper ---
-    // Returns the explicit start of the week relative to the basis date
-    // Georgian: Monday Start (ISO 1)
-    // Jalaali/Islamic: Saturday Start (ISO 6)
     const getStartOfWeek = (basis: DateTime) => {
-      const mode = opts.value.dateMode || 'georgian'
-      
+      const mode = resolvedMode.value
+
       if (mode === 'georgian') {
-         // Goal: Monday Start.
-         // Luxon (ISO): 1=Mon, 7=Sun.
-         // To get to Monday (1), we subtract (weekday - 1) days.
-         // e.g. Mon(1) -> -0 days. Tue(2) -> -1 day.
-         return basis.minus({ days: basis.weekday - 1 })
+        // Sunday = 0, so subtract (weekday - 1) to get to Sunday
+        return basis.minus({ days: basis.weekday - 1 })
+      } else if (mode === 'jalaali' || mode === 'islamic') {
+        // Saturday = 6, Sunday = 7 in Persian calendar
+        // We want to start from Saturday (weekday 6)
+        const offset = basis.weekday === 6 ? 0 : (basis.weekday - 6 + 7) % 7
+        return basis.minus({ days: offset })
       } else {
-         // Goal: Saturday Start (Jalaali/Islamic)
-         // Luxon (ISO): 1=Mon, ... 5=Fri, 6=Sat, 7=Sun.
-         // We want Sat(6) to be index 0.
-         // Sat(6) -> offset 0.
-         // Sun(7) -> offset 1.
-         // Mon(1) -> offset 2.
-         // ...
-         // Fri(5) -> offset 6.
-         // Formula: (weekday + 1) % 7
-         const offset = (basis.weekday + 1) % 7
-         return basis.minus({ days: offset })
+        return basis.minus({ days: basis.weekday - 1 })
       }
     }
 
-    // --- Dynamic Header ---
     const dynamicWeekDays = computed(() => {
       const startOfMonth = displayDate.value.startOf('month')
-      // Use helper instead of generic startOf('week')
       const startGrid = getStartOfWeek(startOfMonth)
-      
+
       const headers = []
       for (let i = 0; i < 7; i++) {
         const d = startGrid.plus({ days: i })
-        
-        // Determine "Red" day: Friday for Jalaali/Islamic, Sunday for Georgian
+
         let isRed = false
-        if (opts.value.dateMode === 'georgian') {
-           // Gregorian: Sunday is holiday (Red)
-           // Luxon Gregorian: 7 is Sunday.
-           isRed = d.weekday === 7
-        } else {
-           // Jalaali/Islamic: Friday is holiday (Red)
-           // Luxon Persian/Islamic: 5 is Friday.
-           isRed = d.weekday === 5
+        if (resolvedMode.value === 'georgian') {
+          isRed = d.weekday === 7 // Sunday
+        } else if (resolvedMode.value === 'jalaali' || resolvedMode.value === 'islamic') {
+          isRed = d.weekday === 5 // Friday
         }
-        
+
+        let label = d.toFormat('ccc')
+
+        // Fix for Persian shortened day names
+        if (resolvedMode.value === 'jalaali' || resolvedMode.value === 'islamic') {
+          const map: Record<number, string> = {
+            6: 'ش', // Saturday
+            7: 'ی', // Sunday
+            1: 'د', // Monday
+            2: 'س', // Tuesday
+            3: 'چ', // Wednesday
+            4: 'پ', // Thursday
+            5: 'ج'  // Friday
+          }
+          if (map[d.weekday]) {
+            label = map[d.weekday]
+          }
+        }
+
         headers.push({
-          label: d.toFormat('ccc'), 
+          label,
           isRed
         })
       }
@@ -461,49 +428,186 @@ export default defineComponent({
       })
     }
 
+
+    // Replace the entire generateGrid function with this:
+
+    const getDaysInJalaaliMonth = (date: DateTime): number => {
+      // Convert the Luxon DateTime to a Jalaali date object
+      const jd = jalaali.toJalaali(date.toJSDate())
+      // Use jalaali-js to get the accurate length of that Jalaali month
+      return jalaali.jalaaliMonthLength(jd.jy, jd.jm)
+    }
+
+
+    const jalaaliMonthNames = [
+      'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
+      'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'
+    ];
+
+    const toJalaaliObject = (gregorianDate: DateTime): { year: number; month: string | null; day: number } => {
+      const jsDate = gregorianDate.toJSDate();
+      const jalaaliDate = jalaali.toJalaali(jsDate);
+
+      return {
+        year: jalaaliDate.jy,
+        month: jalaaliMonthNames[jalaaliDate.jm - 1] || null,
+        day: jalaaliDate.jd
+      };
+    }
+    const toEnglishNum = (s: string | number): string => {
+      const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
+      return String(s).replace(/[۰-۹]/g, (d) => {
+        return String(persianDigits.indexOf(d));
+      });
+    };
+
+    const getFirstDayOfMonth = (date: DateTime): DateTime => {
+      const mode = resolvedMode.value
+      if (mode === 'jalaali' || mode === 'islamic') {
+        const jalaaliInfo = toJalaaliObject(date);
+        const daysToSubtract = jalaaliInfo.day - 1;
+        console.log(date.minus({ days: daysToSubtract }))
+        return date.minus({ days: daysToSubtract });
+      } else {
+        //  console.log('Calendar is GEORGIAN - use standard startOf month')
+        const firstDay = date.startOf('month')
+        //console.log('First day of Georgian month:', firstDay.toString())
+        return firstDay
+      }
+    }
+
+
     const generateGrid = (basisDate: DateTime) => {
-      const startOfMonth = basisDate.startOf('month')
-      // Use helper to ensure grid aligns with headers
-      const startGrid = getStartOfWeek(startOfMonth)
-      const days = []
-      let curr = startGrid
-      
-      const n = DateTime.now().reconfigure(luxonConfig.value as any)
+      const mode = resolvedMode.value
+      const n = DateTime.now()
       const currentStartOfDay = n.startOf('day')
       const currentEndOfDay = n.endOf('day')
 
-      for (let i = 0; i < 42; i++) {
-        const eventMatch = (opts.value.events || []).find(e => {
-          const eDate = e.date instanceof Date ? DateTime.fromJSDate(e.date) : DateTime.fromISO(e.date as string)
-          return eDate.hasSame(curr, 'day')
+
+      if (mode === 'jalaali') {
+        const basisJd = jalaali.toJalaali(basisDate.toJSDate())
+        const firstDayJd = { jy: basisJd.jy, jm: basisJd.jm, jd: 1 }
+        const firstDayGd = jalaali.toGregorian(firstDayJd.jy, firstDayJd.jm, firstDayJd.jd)
+        const firstDayOfMonthDt = DateTime.fromObject({
+          year: firstDayGd.gy,
+          month: firstDayGd.gm,
+          day: firstDayGd.gd,
         })
 
-        const isCurrentMonth = curr.hasSame(basisDate, 'month')
-        
-        const isSelected = selectedDt.value 
-          ? (curr.hasSame(selectedDt.value, 'day') && isCurrentMonth) 
-          : false
-          
-        const isToday = curr.hasSame(n, 'day')
-        
-        let isDisabled = false
-        
-        // 1. Min/Max Logic
-        if (opts.value.minDate && curr < DateTime.fromJSDate(opts.value.minDate).startOf('day')) isDisabled = true
-        if (opts.value.maxDate && curr > DateTime.fromJSDate(opts.value.maxDate).endOf('day')) isDisabled = true
+        // Get the weekday of the first day of the month (0=Sunday, 6=Saturday)
+        const firstDayWeekday = firstDayOfMonthDt.weekday
 
-        // 2. Selection Mode Logic
+        // Calculate days to subtract to get to Saturday (weekday 6)
+        // If first day is Saturday (6), offset = 0
+        // If first day is Sunday (7 or 0), offset = 1
+        // If first day is Monday (1), offset = 2, etc.
+        const offset = firstDayWeekday === 6 ? 0 : (firstDayWeekday - 6 + 7) % 7
+
+        const startGridDt = firstDayOfMonthDt.minus({ days: offset })
+
+        const days = []
+        let currDt = startGridDt
+        const targetMonth = firstDayJd.jm
+
+        for (let i = 0; i < 42; i++) {
+          const currJd = jalaali.toJalaali(currDt.toJSDate())
+          const isCurrentMonth = currJd.jm === targetMonth
+
+          const isSelected = selectedDt.value
+            ? (currDt.hasSame(selectedDt.value, 'day') && isCurrentMonth)
+            : false
+
+          const isToday = currDt.hasSame(n, 'day')
+
+          let isDisabled = false
+          if (opts.value.minDate && currDt < DateTime.fromJSDate(opts.value.minDate).startOf('day')) {
+            isDisabled = true
+          }
+          if (opts.value.maxDate && currDt > DateTime.fromJSDate(opts.value.maxDate).endOf('day')) {
+            isDisabled = true
+          }
+          if (opts.value.selectionMode === 'future' && currDt < currentStartOfDay) isDisabled = true
+          if (opts.value.selectionMode === 'past' && currDt > currentEndOfDay) isDisabled = true
+          if (!isCurrentMonth) isDisabled = true
+
+          const isHoliday = isHolidayCheck(currDt)
+
+          const eventMatch = (opts.value.events || []).find(e => {
+            const eDate = e.date instanceof Date ? DateTime.fromJSDate(e.date) : DateTime.fromISO(e.date as string)
+            return eDate.hasSame(currDt, 'day')
+          })
+
+          days.push({
+            date: currDt,
+            label: toPersianNum(currJd.jd),
+            isCurrentMonth,
+            isToday,
+            isSelected,
+            isDisabled,
+            isHoliday,
+            eventCount: eventMatch ? (eventMatch.count || 1) : 0
+          })
+
+          currDt = currDt.plus({ days: 1 })
+        }
+        return days
+      }
+
+      // Fallback for other calendars (georgian, islamic)
+      let safeBasis = basisDate.reconfigure(luxonConfig.value as any)
+      const startOfMonth = getFirstDayOfMonth(safeBasis)
+      const startGrid = getStartOfWeek(startOfMonth)
+
+      const days = []
+      let curr = startGrid
+
+      for (let i = 0; i < 42; i++) {
+        curr = curr.reconfigure(luxonConfig.value as any)
+
+        const eventMatch = (opts.value.events || []).find(e => {
+          const eDate = e.date instanceof Date ? DateTime.fromJSDate(e.date) : DateTime.fromISO(e.date as string)
+          const eDateConfigured = eDate.reconfigure(luxonConfig.value as any)
+          return eDateConfigured.hasSame(curr, 'day')
+        })
+
+        let isCurrentMonth = false
+        if (mode === 'islamic') {
+          isCurrentMonth = curr.month === startOfMonth.month && curr.year === startOfMonth.year
+        } else {
+          isCurrentMonth = curr.hasSame(startOfMonth, 'month')
+        }
+
+        const isSelected = selectedDt.value
+          ? (curr.hasSame(selectedDt.value, 'day') && isCurrentMonth)
+          : false
+
+        const isToday = curr.hasSame(n, 'day')
+
+        let isDisabled = false
+
+        if (opts.value.minDate && curr < DateTime.fromJSDate(opts.value.minDate).reconfigure(luxonConfig.value as any).startOf('day')) {
+          isDisabled = true
+        }
+        if (opts.value.maxDate && curr > DateTime.fromJSDate(opts.value.maxDate).reconfigure(luxonConfig.value as any).endOf('day')) {
+          isDisabled = true
+        }
+
         if (opts.value.selectionMode === 'future' && curr < currentStartOfDay) isDisabled = true
         if (opts.value.selectionMode === 'past' && curr > currentEndOfDay) isDisabled = true
 
-        // 3. Other Month Restriction
         if (!isCurrentMonth) isDisabled = true
 
         const isHoliday = isHolidayCheck(curr)
 
+        let dayLabel = curr.toFormat('d')
+
+        if (luxonConfig.value.locale === 'fa') {
+          dayLabel = toPersianNum(dayLabel)
+        }
+
         days.push({
           date: curr,
-          label: curr.toFormat('d'),
+          label: dayLabel,
           isCurrentMonth,
           isToday,
           isSelected,
@@ -511,33 +615,41 @@ export default defineComponent({
           isHoliday,
           eventCount: eventMatch ? (eventMatch.count || 1) : 0
         })
+
         curr = curr.plus({ days: 1 })
       }
       return days
     }
 
+
     const currentGrid = computed(() => generateGrid(displayDate.value))
     const prevGrid = computed(() => generateGrid(displayDate.value.minus({ months: 1 })))
     const nextGrid = computed(() => generateGrid(displayDate.value.plus({ months: 1 })))
 
+    onMounted(() => {
+      nextTick(() => {
+        //  console.log(currentGrid.value)
+      })
+    })
+
     // --- Slider Style Logic (RTL Fixed) ---
     const sliderStyle = computed(() => {
       const isRTL = dir.value === 'rtl'
-      
+
       // LTR: Base -33% (Middle). Next (-1) -> -66% (Left). Prev (1) -> 0% (Right).
       // RTL: Base +33% (Middle). Next (-1) -> +66% (Left?). Prev (1) -> 0% (Right).
-      
+
       let base = isRTL ? 33.333333 : -33.333333
       let move = 0
-      
+
       if (isAnimating.value) {
         if (slideOffset.value === 1) {
-           // Prev
-           move = isRTL ? -33.333333 : 33.333333
+          // Prev
+          move = isRTL ? -33.333333 : 33.333333
         }
         if (slideOffset.value === -1) {
-           // Next
-           move = isRTL ? 33.333333 : -33.333333
+          // Next
+          move = isRTL ? 33.333333 : -33.333333
         }
       }
       return { transform: `translateX(${base + move}%)` }
@@ -564,7 +676,7 @@ export default defineComponent({
     }
 
     const handleNavigation = (dir: 'prev' | 'next') => {
-      if (viewMode.value === 'year') return 
+      if (viewMode.value === 'year') return
       if (dir === 'prev' && !canGoPrev.value) return
       if (dir === 'next' && !canGoNext.value) return
 
@@ -578,13 +690,15 @@ export default defineComponent({
 
     // --- Time & Selection Logic ---
     const selectDate = (dt: DateTime) => {
-      const hour = parseInt(timeInputs.value.hour) || 0
-      const minute = parseInt(timeInputs.value.minute) || 0
-      const newDt = dt.set({ hour, minute })
-      emitUpdate(newDt)
+      // Ensure we're working with the correct calendar system
+      let finalDt = dt.reconfigure(luxonConfig.value as any)
+      const hour = parseInt(timeInputs.value.hour.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())) || 0
+      const minute = parseInt(timeInputs.value.minute.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())) || 0
+      finalDt = finalDt.set({ hour, minute })
+      emitUpdate(finalDt)
     }
 
-    const selectMonth = (month: number) => { 
+    const selectMonth = (month: number) => {
       displayDate.value = displayDate.value.set({ month })
       if (opts.value.mode === 'month') {
         emitUpdate(displayDate.value)
@@ -593,7 +707,7 @@ export default defineComponent({
       }
     }
 
-    const selectYear = (year: number) => { 
+    const selectYear = (year: number) => {
       displayDate.value = displayDate.value.set({ year })
       if (opts.value.mode === 'year') {
         emitUpdate(displayDate.value)
@@ -601,30 +715,52 @@ export default defineComponent({
         viewMode.value = 'month'
       }
     }
-    
-    const updateTime = (amt: number, unit: 'hour'|'minute') => {
-       let val = parseInt(timeInputs.value[unit]) || 0; val += amt;
-       const max = unit === 'hour' ? 23 : 59;
-       if (val > max) val = 0; if (val < 0) val = max;
-       timeInputs.value[unit] = val.toString().padStart(2, '0');
-       if(selectedDt.value) selectDate(selectedDt.value)
-    }
-    const validateTime = (unit: 'hour'|'minute') => {
-       let val = parseInt(timeInputs.value[unit]) || 0;
-       const max = unit === 'hour' ? 23 : 59;
-       val = Math.max(0, Math.min(max, val));
-       timeInputs.value[unit] = val.toString().padStart(2, '0');
-       if(selectedDt.value) selectDate(selectedDt.value)
+    const toPersianNum = (n: number | string): string => {
+      return String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]!)
     }
 
-    const parseModelValue = (val: Date|string|null) => {
-       if(!val) return null
-       try {
-         let dt = val instanceof Date ? DateTime.fromJSDate(val) : DateTime.fromISO(val)
-         return dt.isValid ? dt.reconfigure(luxonConfig.value as any) : null
-       } catch {
-         return null
-       }
+
+    const updateTime = (amt: number, unit: 'hour' | 'minute') => {
+      // Parse Persian numerals if present
+      const currentVal = timeInputs.value[unit].replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+      let val = parseInt(currentVal) || 0
+      val += amt
+      const max = unit === 'hour' ? 23 : 59
+      if (val > max) val = 0
+      if (val < 0) val = max
+
+      const paddedVal = val.toString().padStart(2, '0')
+      timeInputs.value[unit] = luxonConfig.value.locale === 'fa'
+        ? toPersianNum(paddedVal)
+        : paddedVal
+
+      if (selectedDt.value) selectDate(selectedDt.value)
+    }
+
+    const validateTime = (unit: 'hour' | 'minute') => {
+      // Parse Persian numerals if present
+      const currentVal = timeInputs.value[unit].replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+      let val = parseInt(currentVal) || 0
+      const max = unit === 'hour' ? 23 : 59
+      val = Math.max(0, Math.min(max, val))
+
+      const paddedVal = val.toString().padStart(2, '0')
+      timeInputs.value[unit] = luxonConfig.value.locale === 'fa'
+        ? toPersianNum(paddedVal)
+        : paddedVal
+
+      if (selectedDt.value) selectDate(selectedDt.value)
+    }
+
+
+    const parseModelValue = (val: Date | string | null) => {
+      if (!val) return null
+      try {
+        let dt = val instanceof Date ? DateTime.fromJSDate(val) : DateTime.fromISO(val)
+        return dt.isValid ? dt.reconfigure(luxonConfig.value as any) : null
+      } catch {
+        return null
+      }
     }
 
     const emitUpdate = (dt: DateTime) => {
@@ -657,19 +793,19 @@ export default defineComponent({
         timeInputs.value.hour = parsed.hour.toString().padStart(2, '0')
         timeInputs.value.minute = parsed.minute.toString().padStart(2, '0')
         if (!opts.value.fixedTime && !opts.value.monthOffset) {
-           if (!parsed.hasSame(displayDate.value, 'month')) displayDate.value = parsed
+          if (!parsed.hasSame(displayDate.value, 'month')) displayDate.value = parsed
         }
       } else {
-        selectedDt.value = null 
+        selectedDt.value = null
       }
     }, { immediate: true })
 
     const onViewSwitch = () => {
       if (viewMode.value === 'year') {
-         const targetYear = selectedDt.value ? selectedDt.value.year : now.value.year
-         let el = yearGridRef.value?.querySelector(`[data-year="${targetYear}"]`)
-         if (!el) el = yearGridRef.value?.querySelector(`[data-year="${now.value.year}"]`)
-         el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        const targetYear = selectedDt.value ? selectedDt.value.year : now.value.year
+        let el = yearGridRef.value?.querySelector(`[data-year="${targetYear}"]`)
+        if (!el) el = yearGridRef.value?.querySelector(`[data-year="${now.value.year}"]`)
+        el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
       }
     }
 
@@ -685,7 +821,7 @@ export default defineComponent({
       now, viewMode, displayDate, selectedDt, currentYear, currentMonthName,
       dynamicWeekDays, prevGrid, currentGrid, nextGrid, monthsList, yearsList, timeInputs, customVars,
       canSwitchView, yearGridRef, handleNavigation, selectDate, selectMonth, selectYear,
-      updateTime, validateTime, getDayClasses, 
+      updateTime, validateTime, getDayClasses,
       sliderStyle, isAnimating, onTransitionEnd, triggerSlide, isSilent, onViewSwitch,
       isFixed, opts, canGoPrev, canGoNext, dir
     }
@@ -703,7 +839,7 @@ export default defineComponent({
   width: var(--dp-width) !important;
   min-width: var(--dp-width) !important;
   max-width: var(--dp-width) !important;
-  
+
   background: var(--dp-bg);
   box-shadow: var(--dp-shadow);
   color: var(--dp-text);
@@ -713,7 +849,9 @@ export default defineComponent({
   box-sizing: border-box;
 }
 
-.dope-date-picker[dir="rtl"] { direction: rtl; }
+.dope-date-picker[dir="rtl"] {
+  direction: rtl;
+}
 
 /* Header */
 .dp-header {
@@ -740,14 +878,23 @@ export default defineComponent({
   justify-content: center;
   transition: var(--dp-transition);
 }
-.dp-nav-btn:hover:not(:disabled) { background: var(--dp-hover-bg); color: var(--dp-text); }
+
+.dp-nav-btn:hover:not(:disabled) {
+  background: var(--dp-hover-bg);
+  color: var(--dp-text);
+}
+
 .dp-nav-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
   pointer-events: none;
 }
 
-.dp-title-group { display: flex; gap: 4px; }
+.dp-title-group {
+  display: flex;
+  gap: 4px;
+}
+
 .dp-title-btn {
   background: transparent;
   border: none;
@@ -759,7 +906,11 @@ export default defineComponent({
   border-radius: 6px;
   transition: var(--dp-transition);
 }
-.dp-title-btn:hover:not(:disabled) { background: var(--dp-hover-bg); color: var(--dp-primary); }
+
+.dp-title-btn:hover:not(:disabled) {
+  background: var(--dp-hover-bg);
+  color: var(--dp-primary);
+}
 
 /* Body */
 .dp-body {
@@ -788,6 +939,7 @@ export default defineComponent({
   justify-items: center;
   flex-shrink: 0;
 }
+
 .dp-weekday {
   text-align: center;
   font-size: 0.75rem;
@@ -797,6 +949,7 @@ export default defineComponent({
   width: var(--dp-cell-size);
   transition: none;
 }
+
 .dp-weekday.is-holiday-header {
   color: var(--dp-holiday-text);
 }
@@ -824,7 +977,7 @@ export default defineComponent({
 .dp-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  justify-items: center; 
+  justify-items: center;
   row-gap: 4px;
 }
 
@@ -851,7 +1004,7 @@ export default defineComponent({
   font-weight: var(--dp-weight-medium);
   position: relative;
   transition: none;
-  border: 1px solid transparent; 
+  border: 1px solid transparent;
   box-sizing: border-box;
 }
 
@@ -870,7 +1023,7 @@ export default defineComponent({
   background: var(--dp-primary);
   color: var(--dp-primary-text);
   border-color: var(--dp-primary);
-  box-shadow: none; 
+  box-shadow: none;
 }
 
 .dp-cell.is-today:not(.is-selected) {
@@ -903,13 +1056,19 @@ export default defineComponent({
   background-color: var(--dp-holiday-text);
   margin-top: 2px;
 }
+
 .dp-cell.is-selected .dp-event-dot {
   background-color: var(--dp-primary-text);
 }
 
 /* Month/Year Views */
-.dp-view-month, .dp-view-year { height: 100%; }
-.dp-month-grid, .dp-year-grid {
+.dp-view-month,
+.dp-view-year {
+  height: 100%;
+}
+
+.dp-month-grid,
+.dp-year-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
@@ -918,6 +1077,7 @@ export default defineComponent({
   align-content: start;
   padding-top: 8px;
 }
+
 .dp-option-cell {
   display: flex;
   align-items: center;
@@ -930,25 +1090,106 @@ export default defineComponent({
   transition: none;
   border: 1px solid transparent;
 }
-.dp-option-cell:hover { background: var(--dp-hover-bg); color: var(--dp-primary); }
-.dp-option-cell.is-selected { background: var(--dp-primary); color: var(--dp-primary-text); border-color: var(--dp-primary); }
-.dp-option-cell.is-current { border-color: var(--dp-primary); color: var(--dp-primary); }
-.dp-option-cell.is-selected.is-current { color: var(--dp-primary-text); }
+
+.dp-option-cell:hover {
+  background: var(--dp-hover-bg);
+  color: var(--dp-primary);
+}
+
+.dp-option-cell.is-selected {
+  background: var(--dp-primary);
+  color: var(--dp-primary-text);
+  border-color: var(--dp-primary);
+}
+
+.dp-option-cell.is-current {
+  border-color: var(--dp-primary);
+  color: var(--dp-primary);
+}
+
+.dp-option-cell.is-selected.is-current {
+  color: var(--dp-primary-text);
+}
 
 /* Time Picker */
-.dp-footer { border-top: 1px solid var(--dp-border); padding: var(--dp-padding); background: var(--dp-bg); }
-.dp-time-wrapper { display: flex; justify-content: center; gap: 24px; }
-.dp-time-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.dp-icon-btn { background: none; border: none; cursor: pointer; color: var(--dp-text); padding: 4px; display: flex; align-items: center; justify-content: center; opacity: 0.6; }
-.dp-icon-btn:hover { opacity: 1; color: var(--dp-primary); }
-.dp-time-input { width: 56px; height: 48px; text-align: center; border: none; border-radius: 12px; background: var(--dp-hover-bg); color: var(--dp-text); font-size: 1.25rem; font-weight: var(--dp-weight-bold); outline: none; transition: var(--dp-transition); }
-.dp-time-input:focus { box-shadow: 0 0 0 2px var(--dp-primary); background: var(--dp-bg); }
-.dp-time-sep { font-size: 2rem; font-weight: 700; color: var(--dp-text); padding-bottom: 8px; }
+.dp-footer {
+  border-top: 1px solid var(--dp-border);
+  padding: var(--dp-padding);
+  background: var(--dp-bg);
+}
+
+.dp-time-wrapper {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+}
+
+.dp-time-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.dp-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--dp-text);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+}
+
+.dp-icon-btn:hover {
+  opacity: 1;
+  color: var(--dp-primary);
+}
+
+.dp-time-input {
+  width: 56px;
+  height: 48px;
+  text-align: center;
+  border: none;
+  border-radius: 12px;
+  background: var(--dp-hover-bg);
+  color: var(--dp-text);
+  font-size: 1.25rem;
+  font-weight: var(--dp-weight-bold);
+  outline: none;
+  transition: var(--dp-transition);
+}
+
+.dp-time-input:focus {
+  box-shadow: 0 0 0 2px var(--dp-primary);
+  background: var(--dp-bg);
+}
+
+.dp-time-sep {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--dp-text);
+  padding-bottom: 8px;
+}
 
 /* Transitions */
-.dp-fade-enter-active, .dp-fade-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
-.dp-fade-enter-from { opacity: 0; transform: scale(0.95); }
-.dp-fade-leave-to { opacity: 0; transform: scale(1.05); display: none; }
+.dp-fade-enter-active,
+.dp-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.dp-fade-enter-from {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.dp-fade-leave-to {
+  opacity: 0;
+  transform: scale(1.05);
+  display: none;
+}
 
 /* Nav Hide Animation */
 .dp-nav-hide {
