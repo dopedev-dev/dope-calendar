@@ -90,7 +90,6 @@
 <script lang="ts">
 import { type PropType, ref, defineComponent, watch, onMounted, computed, nextTick } from 'vue'
 import jalaali from 'jalaali-js'
-import { DateTime } from 'luxon'
 import { useDragToScroll } from '@/composables/useDragToScroll'
 
 interface CalendarItem {
@@ -116,6 +115,10 @@ interface CalendarOptions {
   format?: 'ampm' | '24h' | 'keys'
   holidays?: Date[]
 }
+
+// Helper constants
+const MS_PER_MINUTE = 60000;
+const MS_PER_DAY = 86400000;
 
 export default defineComponent({
   name: 'CalendarGrid',
@@ -191,76 +194,109 @@ export default defineComponent({
         day: number | string
         weekDay: string
         date: Date
+        year?: number // Helper for Jalaali reconstruction
+        month?: number // Helper for Jalaali reconstruction
       }
       const days: DayObject[] = []
-      const getWeekdayIndex = (dt: DateTime) => {
+
+      // Helper to map native day index (0=Sun) to our weekdays array
+      const getWeekdayIndex = (date: Date) => {
+        const day = date.getDay(); // 0 (Sun) to 6 (Sat)
         if (config.value.lang === 'fa') {
-          return (dt.weekday + 1) % 7
+          // fa array starts with Saturday (6). 
+          // Sat(6) -> 0, Sun(0) -> 1 ... Fri(5) -> 6
+          return (day + 1) % 7
         }
-        return dt.weekday % 7
+        // en array starts with Sunday (0).
+        return day
       }
 
-      const addDay = (dt: DateTime, jalaaliDay?: number) => {
+      const addDay = (date: Date, jalaaliData?: { d: number, m: number, y: number }) => {
         let dayNum: number
         let displayDay: string | number
+        let yearVal = date.getFullYear();
+        let monthVal = date.getMonth(); // 0-11
 
-        if (config.value.calendar === 'jalaali' && jalaaliDay) {
-          dayNum = jalaaliDay
-          displayDay = config.value.lang === 'fa' ? toPersianNum(jalaaliDay) : jalaaliDay
+        if (config.value.calendar === 'jalaali' && jalaaliData) {
+          dayNum = jalaaliData.d
+          displayDay = config.value.lang === 'fa' ? toPersianNum(jalaaliData.d) : jalaaliData.d
+          yearVal = jalaaliData.y
+          monthVal = jalaaliData.m
         } else if (config.value.calendar === 'jalaali') {
-          const dtJalali = dt.reconfigure({ outputCalendar: 'persian' })
-          dayNum = dtJalali.day
-          displayDay = config.value.lang === 'fa' ? toPersianNum(dtJalali.day) : dtJalali.day
+          const jDate = jalaali.toJalaali(date)
+          dayNum = jDate.jd
+          displayDay = config.value.lang === 'fa' ? toPersianNum(jDate.jd) : jDate.jd
+          yearVal = jDate.jy
+          monthVal = jDate.jm
         } else {
-          dayNum = dt.day
-          displayDay = config.value.lang === 'fa' ? toPersianNum(dt.day) : dt.day
+          dayNum = date.getDate()
+          displayDay = config.value.lang === 'fa' ? toPersianNum(dayNum) : dayNum
         }
 
         days.push({
           day: dayNum,
           displayDay: displayDay,
-          weekDay: weekdays.value[getWeekdayIndex(dt)]!,
-          date: dt.toJSDate()
+          weekDay: weekdays.value[getWeekdayIndex(date)]!,
+          date: new Date(date), // Clone
+          year: yearVal,
+          month: monthVal
         })
       }
 
-      const startDt = DateTime.fromJSDate(config.value.startDate)
+      const startDt = new Date(config.value.startDate)
 
       if (config.value.mode === 'month') {
         if (config.value.calendar === 'jalaali') {
-          const jd = jalaali.toJalaali(startDt.toJSDate())
+          const jd = jalaali.toJalaali(startDt)
           const monthInfo = jalaali.jalaaliMonthLength(jd.jy, jd.jm)
           for (let i = 1; i <= monthInfo; i++) {
             const georgianDate = jalaali.toGregorian(jd.jy, jd.jm, i)
-            const dt = DateTime.fromObject({
-              year: georgianDate.gy,
-              month: georgianDate.gm,
-              day: georgianDate.gd,
-            })
-            addDay(dt, i)
+            const dt = new Date(georgianDate.gy, georgianDate.gm - 1, georgianDate.gd)
+            addDay(dt, { d: i, m: jd.jm, y: jd.jy })
           }
         } else {
-          const endOfMonth = startDt.endOf('month')
-          for (let i = 1; i <= endOfMonth.day; i++) {
-            addDay(startDt.set({ day: i }))
+          // Gregorian Month Mode
+          // Start from day 1 of the month provided in startDate
+          const current = new Date(startDt.getFullYear(), startDt.getMonth(), 1)
+          const currentMonth = startDt.getMonth()
+          
+          while (current.getMonth() === currentMonth) {
+            addDay(current)
+            current.setDate(current.getDate() + 1)
           }
         }
       } else if (config.value.mode === 'week') {
-        const weekStart = config.value.lang === 'fa'
-          ? startDt.setLocale('fa-IR').startOf('week')
-          : startDt.setLocale('en-US').startOf('week')
+        // Determine start of week
+        // Fa: Start Sat (6). En: Start Sun (0).
+        const currentDay = startDt.getDay()
+        let diff = 0
+        if (config.value.lang === 'fa') {
+          // If today is Sat(6), diff is 0. Sun(0) -> diff -1. 
+          // Logic: (day + 1) % 7 gives index in [Sat...Fri]
+          const indexInFaWeek = (currentDay + 1) % 7
+          diff = -indexInFaWeek
+        } else {
+          diff = -currentDay
+        }
+
+        const weekStart = new Date(startDt)
+        weekStart.setDate(startDt.getDate() + diff)
+        weekStart.setHours(0,0,0,0)
 
         for (let i = 0; i < 7; i++) {
-          addDay(weekStart.plus({ days: i }))
+          const d = new Date(weekStart)
+          d.setDate(weekStart.getDate() + i)
+          addDay(d)
         }
       } else if (config.value.mode === 'custom' && config.value.endDate) {
-        const endDt = DateTime.fromJSDate(config.value.endDate)
-        let currentDt = startDt.startOf('day')
-        const finalDt = endDt.startOf('day')
+        const endDt = new Date(config.value.endDate)
+        endDt.setHours(0,0,0,0) // Normalize
+        let currentDt = new Date(startDt)
+        currentDt.setHours(0,0,0,0)
 
-        while (currentDt <= finalDt) {
+        while (currentDt <= endDt) {
           addDay(currentDt)
-          currentDt = currentDt.plus({ days: 1 })
+          currentDt.setDate(currentDt.getDate() + 1)
         }
       }
 
@@ -489,40 +525,53 @@ export default defineComponent({
 
       return props.modelValue
         .map((item, index) => {
-          const startDt = DateTime.fromJSDate(item.start)
-          const endDt = DateTime.fromJSDate(item.end)
+          const startDt = new Date(item.start)
+          const endDt = new Date(item.end)
 
           const startDayIndex = monthDays.value.findIndex((day) => {
-            const dayDt = config.value.calendar === 'jalaali'
-              ? DateTime.fromObject(
-                { day: day.day, month: day.month, year: day.year },
-                { zone: 'local', numberingSystem: 'latn', outputCalendar: 'persian' }
-              )
-              : DateTime.fromObject({
-                day: day.day,
-                month: day.month,
-                year: day.year
-              })
-
-            return dayDt.hasSame(startDt, 'day')
+            // Check if day.date is same as startDt (ignoring time)
+            const d = day.date
+            return d.getFullYear() === startDt.getFullYear() &&
+                   d.getMonth() === startDt.getMonth() &&
+                   d.getDate() === startDt.getDate()
           })
 
           if (startDayIndex === -1) {
             return null
           }
 
-          const tempDate = endDt.set({ year: startDt.year, month: startDt.month, day: startDt.day })
-          const itemDuration = tempDate.diff(startDt, 'minutes').minutes
-
-          const isSameDay = startDt.hasSame(endDt, 'day')
+          // Calculate duration in minutes
+          const diffMs = endDt.getTime() - startDt.getTime()
+          
+          // Calculate if spanning multiple days
+          const isSameDay = startDt.getFullYear() === endDt.getFullYear() &&
+                            startDt.getMonth() === endDt.getMonth() &&
+                            startDt.getDate() === endDt.getDate()
+          
           let daySpan = 1
           if (!isSameDay) {
-            const dayDiff = endDt.diff(startDt, 'days').days
-            daySpan = Math.floor(dayDiff) + 1
+            // Approximate days difference
+            // Reset both to midnight for accurate day diff
+            const s = new Date(startDt); s.setHours(0,0,0,0);
+            const e = new Date(endDt); e.setHours(0,0,0,0);
+            const dayDiff = Math.round((e.getTime() - s.getTime()) / MS_PER_DAY)
+            daySpan = dayDiff + 1
           }
 
-          const startOfDay = startDt.startOf('day').plus({ hours: config.value.startHour })
-          const itemStartOffset = startDt.diff(startOfDay, 'minutes').minutes
+          // Item Duration logic (for height calculation within a day)
+          // To visualize simply, we can use the time difference.
+          // Note: Logic in original was `tempDate.diff(startDt)`.
+          // We replicate creating a temp date on the same day as start to measure time-of-day duration
+          const tempEnd = new Date(endDt)
+          tempEnd.setFullYear(startDt.getFullYear())
+          tempEnd.setMonth(startDt.getMonth())
+          tempEnd.setDate(startDt.getDate())
+          const itemDuration = (tempEnd.getTime() - startDt.getTime()) / MS_PER_MINUTE
+
+          const startOfDay = new Date(startDt)
+          startOfDay.setHours(config.value.startHour, 0, 0, 0)
+          
+          const itemStartOffset = (startDt.getTime() - startOfDay.getTime()) / MS_PER_MINUTE
 
           const topOffset = (itemStartOffset / (totalHours * 60)) * contentHeight
           const height = (itemDuration / (totalHours * 60)) * contentHeight
@@ -535,7 +584,7 @@ export default defineComponent({
             : { left: `${startDayIndex * dayWidthPercent}%`, right: 'auto' }
 
           // Calculate total duration for z-index (shorter items on top)
-          const totalDurationMinutes = endDt.diff(startDt, 'minutes').minutes
+          const totalDurationMinutes = diffMs / MS_PER_MINUTE
           // Use a large base number so shorter durations result in higher z-index
           const zIndex = Math.max(1, 100000 - Math.floor(totalDurationMinutes))
 
@@ -714,7 +763,6 @@ export default defineComponent({
       if (!calendarRect || !contentContainerRect) return
 
       // Robust index detection for both RTL and LTR using header cells
-      // This avoids inconsistencies with scrollLeft behavior in RTL across browsers
       if (calendarHeader.value && calendarHeader.value.children) {
         const headerChildren = Array.from(calendarHeader.value.children) as HTMLElement[]
         let foundIndex = -1
@@ -899,36 +947,29 @@ export default defineComponent({
         const adjustedHourOffset = Math.floor(clampedMinutes / 60)
         const adjustedMinuteOffset = Math.round(clampedMinutes % 60)
 
-        let newStartDt: DateTime
+        // Construct New Start Date
+        let newStart: Date
 
-        if (config.value.calendar === 'jalaali') {
-          newStartDt = DateTime.fromObject(
-            {
-              day: targetDayData.day,
-              month: targetDayData.month,
-              year: targetDayData.year,
-              hour: config.value.startHour + adjustedHourOffset,
-              minute: adjustedMinuteOffset,
-              second: 0,
-              millisecond: 0
-            },
-            { zone: 'local', numberingSystem: 'latn', outputCalendar: 'persian' }
-          )
+        if (config.value.calendar === 'jalaali' && targetDayData.year && targetDayData.month) {
+          // Reconstruct from Jalaali Year/Month/Day
+          const gDate = jalaali.toGregorian(targetDayData.year, targetDayData.month, Number(targetDayData.day))
+          newStart = new Date(gDate.gy, gDate.gm - 1, gDate.gd)
+          newStart.setHours(config.value.startHour + adjustedHourOffset)
+          newStart.setMinutes(adjustedMinuteOffset)
+          newStart.setSeconds(0)
+          newStart.setMilliseconds(0)
         } else {
-          newStartDt = DateTime.fromObject({
-            day: targetDayData.day,
-            month: targetDayData.month,
-            year: targetDayData.year,
-            hour: config.value.startHour + adjustedHourOffset,
-            minute: adjustedMinuteOffset,
-            second: 0,
-            millisecond: 0
-          })
+          // Gregorian standard construction
+          newStart = new Date(targetDayData.date)
+          newStart.setHours(config.value.startHour + adjustedHourOffset)
+          newStart.setMinutes(adjustedMinuteOffset)
+          newStart.setSeconds(0)
+          newStart.setMilliseconds(0)
         }
 
-        const newStart = newStartDt.toJSDate()
         const newEnd = new Date(newStart.getTime() + originalDurationMs)
 
+        // Adjust for item being dragged by middle (centering vertically)
         const startOfDay = new Date(originalItem.start)
         startOfDay.setHours(0, 0, 0, 0)
         const endOfDay = new Date(originalItem.end)
@@ -960,22 +1001,33 @@ export default defineComponent({
         if (calendarContent.value && calendarHeader.value) {
           const containerRect = calendarContent.value.getBoundingClientRect()
 
-          const startDt = DateTime.fromJSDate(adjustedStart)
-          const endDt = DateTime.fromJSDate(adjustedEnd)
+          const startDt = adjustedStart
+          const endDt = adjustedEnd
 
-          const dayStartOf = startDt.startOf('day').plus({ hours: config.value.startHour })
-          const itemStartOffsetMin = startDt.diff(dayStartOf, 'minutes').minutes
+          const dayStartOf = new Date(startDt)
+          dayStartOf.setHours(config.value.startHour, 0,0,0)
+          
+          const itemStartOffsetMin = (startDt.getTime() - dayStartOf.getTime()) / MS_PER_MINUTE
 
           const topOffsetPx = (itemStartOffsetMin / (totalHours * 60)) * contentHeight
 
-          const tempEndDt = endDt.set({ year: startDt.year, month: startDt.month, day: startDt.day })
-          const durationMin = tempEndDt.diff(startDt, 'minutes').minutes
+          const tempEndDt = new Date(endDt)
+          tempEndDt.setFullYear(startDt.getFullYear())
+          tempEndDt.setMonth(startDt.getMonth())
+          tempEndDt.setDate(startDt.getDate())
+          const durationMin = (tempEndDt.getTime() - startDt.getTime()) / MS_PER_MINUTE
 
           const heightPx = (durationMin / (totalHours * 60)) * contentHeight
 
           let daySpan = 1
-          if (!startDt.hasSame(endDt, 'day')) {
-            const diff = endDt.diff(startDt, 'days').days
+          const isSameDay = startDt.getFullYear() === endDt.getFullYear() &&
+                            startDt.getMonth() === endDt.getMonth() &&
+                            startDt.getDate() === endDt.getDate()
+          
+          if (!isSameDay) {
+            const s = new Date(startDt); s.setHours(0,0,0,0);
+            const e = new Date(endDt); e.setHours(0,0,0,0);
+            const diff = (e.getTime() - s.getTime()) / MS_PER_DAY
             daySpan = Math.floor(diff) + 1
           }
 
@@ -987,8 +1039,6 @@ export default defineComponent({
 
           if (config.value.dir === 'rtl') {
             // In RTL, items grow leftwards from the start index.
-            // If span > 1, the item spans from targetDayIndex to targetDayIndex + daySpan - 1.
-            // The "Left" edge of the item is the Left edge of the column at (targetDayIndex + daySpan - 1).
             const rightMostIndex = targetDayIndex
             const leftMostIndex = Math.min(headerChildren.length - 1, targetDayIndex + daySpan - 1)
 
@@ -1153,16 +1203,16 @@ export default defineComponent({
       }))
 
       const itemToUpdate = newItems[originalIndex]
-      const originalStart = DateTime.fromJSDate(initialStart.value)
-      const originalEnd = DateTime.fromJSDate(initialEnd.value)
+      const originalStart = new Date(initialStart.value)
+      const originalEnd = new Date(initialEnd.value)
 
       if (handle === 'left') {
-        const newStart = originalStart.plus({ days: deltaDays }).toJSDate()
+        const newStart = new Date(originalStart.getTime() + deltaDays * MS_PER_DAY)
         if (newStart.getTime() < itemToUpdate.end.getTime()) {
           itemToUpdate.start = newStart
         }
       } else {
-        const newEnd = originalEnd.plus({ days: deltaDays }).toJSDate()
+        const newEnd = new Date(originalEnd.getTime() + deltaDays * MS_PER_DAY)
         if (newEnd.getTime() > itemToUpdate.start.getTime()) {
           itemToUpdate.end = newEnd
         }

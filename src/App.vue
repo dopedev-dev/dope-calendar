@@ -1,5 +1,5 @@
 <template>
-  <div class="h-dvh w-dvw">
+ <!-- <div  class="calendar-holder">
     <CalendarGrid :option="{ dir: 'rtl', editable: true }" v-model="calendarItems">
       <template #item="{ item }">
         <div class="custom-calendar-item cursor-pointer" :style="{ backgroundColor: item.color }">
@@ -11,8 +11,8 @@
         </div>
       </template>
     </CalendarGrid>
-  </div>
-  <!-- <DatePicker v-model="today" /> -->
+  </div> -->
+  <DatePicker :options="{dateMode:'jalaali', calendar:'persian'}" v-model="today" />
 </template>
 <script setup lang="ts">
 import { ref } from 'vue'
@@ -102,5 +102,12 @@ const holidays = ref([
 .custom-calendar-item {
   width: 100%;
   height: 100%;
+}
+
+.calendar-holder{
+  max-width: 100vw;
+  max-height: 100vh;
+  width: 100vw;
+  height: 100vh;
 }
 </style>

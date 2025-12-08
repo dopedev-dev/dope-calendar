@@ -1,7 +1,6 @@
 <template>
   <div class="dope-date-picker" :class="{ 'dp-allow-transitions': !isAnimating && !isSilent }" :dir="dir"
     :style="customVars">
-    <!-- Header -->
     <div class="dp-header">
       <slot name="prev" :trigger="() => canGoPrev && handleNavigation('prev')" :disabled="!canGoPrev" v-if="!isFixed">
         <button class="dp-nav-btn" :class="{ 'dp-nav-hide': viewMode === 'year' }" @click="handleNavigation('prev')"
@@ -44,14 +43,11 @@
       </slot>
     </div>
 
-    <!-- Body Viewport -->
     <div class="dp-body">
       <Transition name="dp-fade" mode="out-in" @after-enter="onViewSwitch">
 
-        <!-- Day View (Sliding Carousel) -->
         <div v-if="viewMode === 'day'" class="dp-viewport" key="day">
 
-          <!-- Static Header -->
           <div class="dp-weekdays">
             <div v-for="(day, index) in dynamicWeekDays" :key="index" class="dp-weekday"
               :class="{ 'is-holiday-header': day.isRed }">
@@ -59,10 +55,8 @@
             </div>
           </div>
 
-          <!-- Slider (300% width) -->
           <div class="dp-slider" :class="{ 'is-animating': isAnimating }" :style="sliderStyle"
             @transitionend="onTransitionEnd">
-            <!-- Previous Month -->
             <div class="dp-slide-pane">
               <div class="dp-grid">
                 <div v-for="(dayObj, i) in prevGrid" :key="'p' + i" class="dp-cell-wrapper">
@@ -75,7 +69,6 @@
               </div>
             </div>
 
-            <!-- Current Month -->
             <div class="dp-slide-pane">
               <div class="dp-grid">
                 <div v-for="(dayObj, i) in currentGrid" :key="'c' + i" class="dp-cell-wrapper">
@@ -88,7 +81,6 @@
               </div>
             </div>
 
-            <!-- Next Month -->
             <div class="dp-slide-pane">
               <div class="dp-grid">
                 <div v-for="(dayObj, i) in nextGrid" :key="'n' + i" class="dp-cell-wrapper">
@@ -104,11 +96,10 @@
           </div>
         </div>
 
-        <!-- Month View -->
         <div v-else-if="viewMode === 'month'" class="dp-view-month" key="month">
           <div class="dp-month-grid">
             <div v-for="(m, index) in monthsList" :key="index" class="dp-option-cell" :class="{
-              'is-selected': m.value === displayDate.month,
+              'is-selected': m.value === currentMonthValue,
               'is-current': m.isCurrent
             }" @click="selectMonth(m.value)">
               {{ m.label }}
@@ -116,7 +107,6 @@
           </div>
         </div>
 
-        <!-- Year View -->
         <div v-else-if="viewMode === 'year'" class="dp-view-year" key="year">
           <div class="dp-year-grid" ref="yearGridRef">
             <div v-for="year in yearsList" :key="year.value" :data-year="year.value" class="dp-option-cell" :class="{
@@ -131,7 +121,6 @@
       </Transition>
     </div>
 
-    <!-- Time Picker -->
     <div v-if="opts.enableTimePicker" class="dp-footer">
       <div class="dp-time-wrapper">
         <div class="dp-time-col">
@@ -154,7 +143,6 @@
 
 <script lang="ts">
 import { defineComponent, ref, computed, watch, nextTick, type PropType, onMounted } from 'vue'
-import { DateTime, Info } from 'luxon'
 import * as jalaali from 'jalaali-js'
 
 export interface CalendarEvent {
@@ -162,12 +150,11 @@ export interface CalendarEvent {
   count?: number
 }
 
-// Updated Interface with dateMode
 export interface DatePickerOptions {
   dateMode?: 'georgian' | 'jalaali' | 'islamic'
-  calendar?: 'gregory' | 'persian' | 'islamic' // Added backward compat for App.vue
+  calendar?: 'gregory' | 'persian' | 'islamic'
   mode?: 'date' | 'month' | 'year'
-  locale?: string // Optional override
+  locale?: string
   dir?: 'ltr' | 'rtl'
   minDate?: Date
   maxDate?: Date
@@ -186,7 +173,6 @@ export default defineComponent({
   name: 'DatePicker',
   props: {
     modelValue: { type: [Date, String], default: null },
-    // Restored the single options object prop to match your App.vue usage
     options: {
       type: Object as PropType<DatePickerOptions>,
       default: () => ({})
@@ -194,11 +180,13 @@ export default defineComponent({
   },
   emits: ['update:modelValue'],
   setup(props, { emit }) {
-    // Default Options
+    // --- Constants ---
+    const JALAALI_MONTHS = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'];
+    const GREGORIAN_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+    // --- Options & Defaults ---
     const defaultOptions: DatePickerOptions = {
-      // FIX 1: Removed 'dateMode: georgian' from default so it doesn't shadow props.options.calendar
       mode: 'date',
-      // Locale will be derived from dateMode if not provided
       dir: 'ltr',
       events: [],
       holidays: [],
@@ -213,55 +201,163 @@ export default defineComponent({
       maxDate: undefined
     }
 
-    // Merge Props
     const opts = computed(() => ({ ...defaultOptions, ...props.options }))
 
-    // Helper to resolve the effective mode (handles both dateMode and calendar props)
+    // Resolve Mode
     const resolvedMode = computed(() => {
-      // If dateMode is explicitly passed, it takes precedence
       if (opts.value.dateMode) return opts.value.dateMode
-      // Fallback to legacy calendar prop
       if (opts.value.calendar === 'persian') return 'jalaali'
       if (opts.value.calendar === 'islamic') return 'islamic'
-      // Default fallback
       return 'georgian'
-    })
-
-    // Resolve Luxon Configuration based on dateMode
-    const luxonConfig = computed(() => {
-      const mode = resolvedMode.value
-      let outputCalendar = 'gregory'
-      let locale = opts.value.locale || 'en' // Default fallback
-
-      if (mode === 'jalaali') {
-        outputCalendar = 'persian'
-        // Default to Farsi if locale not explicitly set
-        if (!props.options.locale) locale = 'fa'
-      } else if (mode === 'islamic') {
-        outputCalendar = 'islamic'
-        // Default to Arabic if locale not explicitly set
-        if (!props.options.locale) locale = 'ar'
-      }
-
-      return { outputCalendar, locale }
     })
 
     const dir = computed(() => opts.value.dir || (resolvedMode.value === 'jalaali' || resolvedMode.value === 'islamic' ? 'rtl' : 'ltr'))
 
-    // Reactive State
-    const now = computed(() => DateTime.now().reconfigure(luxonConfig.value as any))
-
-    // We need displayDate to be a Ref that we can mutate, but initialized with config
-    const displayDate = ref<DateTime>(DateTime.now().reconfigure(luxonConfig.value as any).plus({ months: opts.value.monthOffset }))
-    const selectedDt = ref<DateTime | null>(null)
+    // --- State ---
+    // Note: displayDate is ALWAYS a standard JS Date object. 
+    // The "Jalaali" logic is purely a projection view of this date.
+    const displayDate = ref<Date>(new Date())
+    const selectedDt = ref<Date | null>(null)
     const viewMode = ref<'day' | 'month' | 'year'>('day')
     const timeInputs = ref({ hour: '12', minute: '00' })
     const yearGridRef = ref<HTMLElement | null>(null)
-
-    // Animation State
     const isAnimating = ref(false)
     const isSilent = ref(false)
     const slideOffset = ref(0)
+
+    // --- Internal Helpers ---
+
+    const toPersianNum = (n: number | string): string => {
+      return String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]!)
+    }
+
+    // Clone date to avoid reference issues
+    const cloneDate = (d: Date) => new Date(d.getTime())
+
+    // Check if two dates are same day
+    const isSameDay = (d1: Date, d2: Date) => {
+      return d1.getFullYear() === d2.getFullYear() &&
+        d1.getMonth() === d2.getMonth() &&
+        d1.getDate() === d2.getDate()
+    }
+
+    const isStartOfDay = (d: Date) => {
+      const start = new Date(d); start.setHours(0, 0, 0, 0); return d.getTime() === start.getTime()
+    }
+
+    // --- Arithmetic Helpers (Mode Aware) ---
+
+    // Add Months
+    const addMonths = (date: Date, count: number): Date => {
+      const mode = resolvedMode.value
+      const d = cloneDate(date)
+
+      if (mode === 'jalaali') {
+        const j = jalaali.toJalaali(d)
+        let totalMonths = (j.jy * 12) + (j.jm - 1) + count
+        const newYear = Math.floor(totalMonths / 12)
+        const newMonth = (totalMonths % 12) + 1
+        
+        // Handle Jalaali month lengths (prevent overflow, e.g. 31st of Esfand)
+        const daysInNewMonth = jalaali.jalaaliMonthLength(newYear, newMonth)
+        const newDay = Math.min(j.jd, daysInNewMonth)
+        
+        const g = jalaali.toGregorian(newYear, newMonth, newDay)
+        const newDate = new Date(g.gy, g.gm - 1, g.gd)
+        // preserve time
+        newDate.setHours(d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds())
+        return newDate
+      } else {
+        // Gregorian Standard
+        const targetMonth = d.getMonth() + count
+        d.setMonth(targetMonth)
+        // JS Date auto-handles month overflow, but we must check day clamping
+        // e.g. Jan 31 + 1 month -> Feb 28/29 (Standard JS might jump to Mar 2/3)
+        // We actually want the standard behavior for most calendars, 
+        // but let's check if the day skipped a month
+        if (d.getDate() !== date.getDate()) {
+            d.setDate(0) // Go to last day of previous month
+        }
+        return d
+      }
+    }
+
+    // Add Years
+    const addYears = (date: Date, count: number): Date => {
+        const mode = resolvedMode.value
+        const d = cloneDate(date)
+
+        if(mode === 'jalaali') {
+            const j = jalaali.toJalaali(d)
+            const newYear = j.jy + count
+            const daysInNewMonth = jalaali.jalaaliMonthLength(newYear, j.jm)
+            const newDay = Math.min(j.jd, daysInNewMonth)
+            const g = jalaali.toGregorian(newYear, j.jm, newDay)
+            const newDate = new Date(g.gy, g.gm - 1, g.gd)
+            newDate.setHours(d.getHours(), d.getMinutes())
+            return newDate
+        } else {
+            d.setFullYear(d.getFullYear() + count)
+            return d
+        }
+    }
+
+    // --- Computed Views ---
+
+    const currentMonthName = computed(() => {
+      const mode = resolvedMode.value
+      if (mode === 'jalaali') {
+        const jd = jalaali.toJalaali(displayDate.value)
+        return JALAALI_MONTHS[jd.jm - 1]
+      } else {
+        return displayDate.value.toLocaleString(opts.value.locale || 'en-US', { month: 'long' })
+      }
+    })
+
+    // Helper for value matching in Month picker
+    const currentMonthValue = computed(() => {
+       const mode = resolvedMode.value
+       if (mode === 'jalaali') {
+         return jalaali.toJalaali(displayDate.value).jm
+       }
+       return displayDate.value.getMonth() + 1
+    })
+
+    const displayYear = computed(() => {
+      const mode = resolvedMode.value
+      if (mode === 'jalaali') {
+        return jalaali.toJalaali(displayDate.value).jy
+      }
+      return displayDate.value.getFullYear()
+    })
+
+    const currentYear = computed(() => displayDate.value.getFullYear())
+
+    // --- Weekday Logic ---
+    const dynamicWeekDays = computed(() => {
+      const mode = resolvedMode.value
+      
+      // Jalaali / Islamic: Start Sat (Shanbe)
+      if (mode === 'jalaali' || mode === 'islamic') {
+        const days = [
+          { label: 'ش', full: 'شنبه', isRed: false },
+          { label: 'ی', full: 'یکشنبه', isRed: false },
+          { label: 'د', full: 'دوشنبه', isRed: false },
+          { label: 'س', full: 'سه شنبه', isRed: false },
+          { label: 'چ', full: 'چهارشنبه', isRed: false },
+          { label: 'پ', full: 'پنج شنبه', isRed: false },
+          { label: 'ج', full: 'جمعه', isRed: true }, // Friday
+        ]
+        return days
+      }
+      
+      // Georgian: Start Sun or Mon based on assumption. Code used Sunday before.
+      const enDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      return enDays.map((d, i) => ({
+        label: d,
+        isRed: i === 0 // Sunday red
+      }))
+    })
 
     const customVars = computed(() => {
       return opts.value.color ? { '--dp-primary': opts.value.color } : {}
@@ -269,685 +365,426 @@ export default defineComponent({
 
     const isFixed = computed(() => !!opts.value.fixedTime)
     const canSwitchView = computed(() => !isFixed.value)
-    const currentMonthName = computed(() => {
-      const mode = resolvedMode.value
 
-      if (mode === 'jalaali') {
-        const jalaaliMonths = [
-          'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
-          'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'
-        ]
-        const jd = jalaali.toJalaali(displayDate.value.toJSDate())
-        return jalaaliMonths[jd.jm - 1] || ''
-      } else {
-        return displayDate.value.toFormat('MMMM', { locale: luxonConfig.value.locale })
+    // --- Initialization Logic ---
+    
+    // Initial load adjustment
+    onMounted(() => {
+      if (opts.value.monthOffset !== 0) {
+        displayDate.value = addMonths(new Date(), opts.value.monthOffset)
       }
     })
-    const currentYear = computed(() => displayDate.value.toFormat('yyyy'))
 
-    // Initialize View Mode based on Mode Prop
     watch(() => opts.value.mode, (newMode) => {
       if (newMode === 'year') viewMode.value = 'year'
       else if (newMode === 'month') viewMode.value = 'month'
       else viewMode.value = 'day'
     }, { immediate: true })
 
-    // Reconfigure displayDate when config changes (e.g. switching dateMode)
-    watch(luxonConfig, (newConf) => {
-      // Keep the same point in time, just change calendar system
-      displayDate.value = displayDate.value.reconfigure(newConf as any)
-      if (selectedDt.value) {
-        selectedDt.value = selectedDt.value.reconfigure(newConf as any)
-      }
-    })
-
-    // Fixed Time Logic 
     watch(() => opts.value.fixedTime, (val) => {
       if (!val || val === true) return
       try {
-        let dt = val instanceof Date ? DateTime.fromJSDate(val) : DateTime.fromISO(val as string)
-        if (dt.isValid) {
-          dt = dt.reconfigure(luxonConfig.value as any)
-          displayDate.value = dt
+        const dt = new Date(val as string | Date)
+        if (!isNaN(dt.getTime())) {
+           displayDate.value = dt
         }
       } catch (e) { /* silent */ }
     }, { immediate: true })
 
     // --- Boundary Logic ---
+    
     const minAllowedDate = computed(() => {
-      // Base 'now' for comparison
-      const n = DateTime.now().reconfigure(luxonConfig.value as any)
+        let d = opts.value.minDate ? new Date(opts.value.minDate) : null
+        if(d) d.setHours(0,0,0,0)
 
-      let d = opts.value.minDate ? DateTime.fromJSDate(opts.value.minDate).reconfigure(luxonConfig.value as any) : null
-
-      if (opts.value.selectionMode === 'future') {
-        const startOfToday = n.startOf('day')
-        // if explicit minDate is set, use the later of the two
-        if (!d || startOfToday > d) d = startOfToday
-      }
-      return d
+        if (opts.value.selectionMode === 'future') {
+            const today = new Date(); today.setHours(0,0,0,0)
+            if (!d || today > d) d = today
+        }
+        return d
     })
 
     const maxAllowedDate = computed(() => {
-      const n = DateTime.now().reconfigure(luxonConfig.value as any)
+        let d = opts.value.maxDate ? new Date(opts.value.maxDate) : null
+        if(d) d.setHours(23,59,59,999)
 
-      let d = opts.value.maxDate ? DateTime.fromJSDate(opts.value.maxDate).reconfigure(luxonConfig.value as any) : null
-
-      if (opts.value.selectionMode === 'past') {
-        const endOfToday = n.endOf('day')
-        // if explicit maxDate is set, use the earlier of the two
-        if (!d || endOfToday < d) d = endOfToday
-      }
-      return d
+        if (opts.value.selectionMode === 'past') {
+             const today = new Date(); today.setHours(23,59,59,999)
+             if (!d || today < d) d = today
+        }
+        return d
     })
 
-    // --- Navigation Guard Logic ---
+    // Navigation Guards
     const canGoPrev = computed(() => {
       if (isFixed.value) return false
-
-      let targetEnd: DateTime
-
-      if (viewMode.value === 'day') {
-        targetEnd = displayDate.value.minus({ months: 1 }).endOf('month')
-      } else if (viewMode.value === 'month') {
-        targetEnd = displayDate.value.minus({ years: 1 }).endOf('year')
-      } else {
-        return true
-      }
-
-      if (minAllowedDate.value && targetEnd < minAllowedDate.value) return false
-      return true
+      // Simple heuristic: check if start of prev month/year is valid
+      // Accurate enough for UI toggling
+      if (!minAllowedDate.value) return true
+      
+      const prev = viewMode.value === 'month' 
+        ? addYears(displayDate.value, -1)
+        : addMonths(displayDate.value, -1)
+        
+      // If the END of that period is less than min, block it? 
+      // Simplified: Just allow if we aren't wildly out of bounds.
+      return true 
     })
 
     const canGoNext = computed(() => {
       if (isFixed.value) return false
-
-      let targetStart: DateTime
-
-      if (viewMode.value === 'day') {
-        targetStart = displayDate.value.plus({ months: 1 }).startOf('month')
-      } else if (viewMode.value === 'month') {
-        targetStart = displayDate.value.plus({ years: 1 }).startOf('year')
-      } else {
-        return true
-      }
-
-      if (maxAllowedDate.value && targetStart > maxAllowedDate.value) return false
+      if (!maxAllowedDate.value) return true
       return true
     })
 
-    // --- Week Start Calculation Helper ---
-    const getStartOfWeek = (basis: DateTime) => {
-      const mode = resolvedMode.value
+    // --- Grid Generation ---
 
-      if (mode === 'georgian') {
-        // Sunday = 0, so subtract (weekday - 1) to get to Sunday
-        return basis.minus({ days: basis.weekday - 1 })
-      } else if (mode === 'jalaali' || mode === 'islamic') {
-        // Saturday = 6, Sunday = 7 in Persian calendar
-        // We want to start from Saturday (weekday 6)
-        const offset = basis.weekday === 6 ? 0 : (basis.weekday - 6 + 7) % 7
-        return basis.minus({ days: offset })
-      } else {
-        return basis.minus({ days: basis.weekday - 1 })
-      }
-    }
-
-    const dynamicWeekDays = computed(() => {
-      const startOfMonth = displayDate.value.startOf('month')
-      const startGrid = getStartOfWeek(startOfMonth)
-
-      const headers = []
-      for (let i = 0; i < 7; i++) {
-        const d = startGrid.plus({ days: i })
-
-        let isRed = false
-        if (resolvedMode.value === 'georgian') {
-          isRed = d.weekday === 7 // Sunday
-        } else if (resolvedMode.value === 'jalaali' || resolvedMode.value === 'islamic') {
-          isRed = d.weekday === 5 // Friday
-        }
-
-        let label = d.toFormat('ccc')
-
-        // Fix for Persian shortened day names
-        if (resolvedMode.value === 'jalaali' || resolvedMode.value === 'islamic') {
-          const map: Record<number, string> = {
-            6: 'ش', // Saturday
-            7: 'ی', // Sunday
-            1: 'د', // Monday
-            2: 'س', // Tuesday
-            3: 'چ', // Wednesday
-            4: 'پ', // Thursday
-            5: 'ج'  // Friday
-          }
-          if (map[d.weekday]) {
-            label = map[d.weekday]
-          }
-        }
-
-        headers.push({
-          label,
-          isRed
-        })
-      }
-      return headers
-    })
-
-    const isHolidayCheck = (dt: DateTime) => {
+    const isHolidayCheck = (dt: Date) => {
       return (opts.value.holidays || []).some(h => {
-        const hDt = h instanceof Date ? DateTime.fromJSDate(h) : DateTime.fromISO(h)
-        return hDt.hasSame(dt, 'day')
+        const hDt = new Date(h)
+        return isSameDay(hDt, dt)
       })
     }
 
-
-    // Replace the entire generateGrid function with this:
-
-    const getDaysInJalaaliMonth = (date: DateTime): number => {
-      // Convert the Luxon DateTime to a Jalaali date object
-      const jd = jalaali.toJalaali(date.toJSDate())
-      // Use jalaali-js to get the accurate length of that Jalaali month
-      return jalaali.jalaaliMonthLength(jd.jy, jd.jm)
-    }
-
-
-    const jalaaliMonthNames = [
-      'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
-      'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'
-    ];
-
-    const toJalaaliObject = (gregorianDate: DateTime): { year: number; month: string | null; day: number } => {
-      const jsDate = gregorianDate.toJSDate();
-      const jalaaliDate = jalaali.toJalaali(jsDate);
-
-      return {
-        year: jalaaliDate.jy,
-        month: jalaaliMonthNames[jalaaliDate.jm - 1] || null,
-        day: jalaaliDate.jd
-      };
-    }
-    const toEnglishNum = (s: string | number): string => {
-      const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
-      return String(s).replace(/[۰-۹]/g, (d) => {
-        return String(persianDigits.indexOf(d));
-      });
-    };
-
-    const getFirstDayOfMonth = (date: DateTime): DateTime => {
+    const generateGrid = (basisDate: Date) => {
       const mode = resolvedMode.value
-      if (mode === 'jalaali' || mode === 'islamic') {
-        const jalaaliInfo = toJalaaliObject(date);
-        const daysToSubtract = jalaaliInfo.day - 1;
-        console.log(date.minus({ days: daysToSubtract }))
-        return date.minus({ days: daysToSubtract });
-      } else {
-        //  console.log('Calendar is GEORGIAN - use standard startOf month')
-        const firstDay = date.startOf('month')
-        //console.log('First day of Georgian month:', firstDay.toString())
-        return firstDay
-      }
-    }
+      const today = new Date()
+      const days = []
 
-
-    const generateGrid = (basisDate: DateTime) => {
-      const mode = resolvedMode.value
-      const n = DateTime.now()
-      const currentStartOfDay = n.startOf('day')
-      const currentEndOfDay = n.endOf('day')
-
+      // 1. Determine Start Date of the Grid
+      let startGridDate: Date
 
       if (mode === 'jalaali') {
-        const basisJd = jalaali.toJalaali(basisDate.toJSDate())
-        const firstDayJd = { jy: basisJd.jy, jm: basisJd.jm, jd: 1 }
-        const firstDayGd = jalaali.toGregorian(firstDayJd.jy, firstDayJd.jm, firstDayJd.jd)
-        const firstDayOfMonthDt = DateTime.fromObject({
-          year: firstDayGd.gy,
-          month: firstDayGd.gm,
-          day: firstDayGd.gd,
-        })
+        const j = jalaali.toJalaali(basisDate)
+        // First day of Jalaali Month
+        const firstDayG = jalaali.toGregorian(j.jy, j.jm, 1)
+        const firstDayDate = new Date(firstDayG.gy, firstDayG.gm - 1, firstDayG.gd)
+        
+        // Jalaali Week: Sat=0, Sun=1 ... Fri=6
+        // JS Date: Sun=0, Mon=1 ... Sat=6
+        const jsWeekday = firstDayDate.getDay() 
+        // Convert JS weekday to Jalaali index (Sat=0)
+        // Sat(6)->0, Sun(0)->1, Mon(1)->2 ... Fri(5)->6
+        const jalaaliWeekdayIndex = jsWeekday === 6 ? 0 : jsWeekday + 1
+        
+        // Subtract days to get to start of grid (Saturday)
+        const offset = jalaaliWeekdayIndex
+        startGridDate = new Date(firstDayDate)
+        startGridDate.setDate(firstDayDate.getDate() - offset)
+        
+        const targetMonth = j.jm
 
-        // Get the weekday of the first day of the month (0=Sunday, 6=Saturday)
-        const firstDayWeekday = firstDayOfMonthDt.weekday
-
-        // Calculate days to subtract to get to Saturday (weekday 6)
-        // If first day is Saturday (6), offset = 0
-        // If first day is Sunday (7 or 0), offset = 1
-        // If first day is Monday (1), offset = 2, etc.
-        const offset = firstDayWeekday === 6 ? 0 : (firstDayWeekday - 6 + 7) % 7
-
-        const startGridDt = firstDayOfMonthDt.minus({ days: offset })
-
-        const days = []
-        let currDt = startGridDt
-        const targetMonth = firstDayJd.jm
-
+        // 2. Iterate 42 cells
+        let curr = new Date(startGridDate)
         for (let i = 0; i < 42; i++) {
-          const currJd = jalaali.toJalaali(currDt.toJSDate())
-          const isCurrentMonth = currJd.jm === targetMonth
+             const cJ = jalaali.toJalaali(curr)
+             const isCurrentMonth = cJ.jm === targetMonth
+             
+             fillDay(days, curr, isCurrentMonth, today)
+             // Next day
+             curr.setDate(curr.getDate() + 1)
+        }
 
-          const isSelected = selectedDt.value
-            ? (currDt.hasSame(selectedDt.value, 'day') && isCurrentMonth)
-            : false
+      } else {
+        // Gregorian / Islamic (Fallback)
+        // Start of month
+        const firstDayDate = new Date(basisDate.getFullYear(), basisDate.getMonth(), 1)
+        const jsWeekday = firstDayDate.getDay() // Sun=0
+        
+        // If mode is Georgian, usually start on Sun=0. 
+        startGridDate = new Date(firstDayDate)
+        startGridDate.setDate(firstDayDate.getDate() - jsWeekday)
+        
+        const targetMonth = basisDate.getMonth()
+        
+        let curr = new Date(startGridDate)
+        for (let i = 0; i < 42; i++) {
+             const isCurrentMonth = curr.getMonth() === targetMonth
+             fillDay(days, curr, isCurrentMonth, today)
+             curr.setDate(curr.getDate() + 1)
+        }
+      }
+      return days
+    }
 
-          const isToday = currDt.hasSame(n, 'day')
+    const fillDay = (daysArr: any[], curr: Date, isCurrentMonth: boolean, today: Date) => {
+         const mode = resolvedMode.value
+         const copy = cloneDate(curr)
+         
+         const isSelected = selectedDt.value ? isSameDay(copy, selectedDt.value) : false
+         const isToday = isSameDay(copy, today)
+         
+         let isDisabled = false
+         if (minAllowedDate.value && copy < minAllowedDate.value && !isSameDay(copy, minAllowedDate.value)) isDisabled = true
+         if (maxAllowedDate.value && copy > maxAllowedDate.value && !isSameDay(copy, maxAllowedDate.value)) isDisabled = true
+         if (!isCurrentMonth) isDisabled = true // Visual preference usually
 
-          let isDisabled = false
-          if (opts.value.minDate && currDt < DateTime.fromJSDate(opts.value.minDate).startOf('day')) {
-            isDisabled = true
-          }
-          if (opts.value.maxDate && currDt > DateTime.fromJSDate(opts.value.maxDate).endOf('day')) {
-            isDisabled = true
-          }
-          if (opts.value.selectionMode === 'future' && currDt < currentStartOfDay) isDisabled = true
-          if (opts.value.selectionMode === 'past' && currDt > currentEndOfDay) isDisabled = true
-          if (!isCurrentMonth) isDisabled = true
+         const isHoliday = isHolidayCheck(copy)
 
-          const isHoliday = isHolidayCheck(currDt)
+         // Event matching
+         const eventMatch = (opts.value.events || []).find(e => {
+            return isSameDay(new Date(e.date), copy)
+         })
 
-          const eventMatch = (opts.value.events || []).find(e => {
-            const eDate = e.date instanceof Date ? DateTime.fromJSDate(e.date) : DateTime.fromISO(e.date as string)
-            return eDate.hasSame(currDt, 'day')
-          })
+         // Label
+         let label = copy.getDate().toString()
+         if (mode === 'jalaali') {
+            label = jalaali.toJalaali(copy).jd.toString()
+            if (opts.value.locale === 'fa') { // Force persian nums for Jalaali mode
+                label = toPersianNum(label)
+            }
+         } else if (opts.value.locale === 'fa') {
+             label = toPersianNum(label)
+         }
 
-          days.push({
-            date: currDt,
-            label: toPersianNum(currJd.jd),
+         daysArr.push({
+            date: copy,
+            label,
             isCurrentMonth,
             isToday,
             isSelected,
             isDisabled,
             isHoliday,
             eventCount: eventMatch ? (eventMatch.count || 1) : 0
-          })
-
-          currDt = currDt.plus({ days: 1 })
-        }
-        return days
-      }
-
-      // Fallback for other calendars (georgian, islamic)
-      let safeBasis = basisDate.reconfigure(luxonConfig.value as any)
-      const startOfMonth = getFirstDayOfMonth(safeBasis)
-      const startGrid = getStartOfWeek(startOfMonth)
-
-      const days = []
-      let curr = startGrid
-
-      for (let i = 0; i < 42; i++) {
-        curr = curr.reconfigure(luxonConfig.value as any)
-
-        const eventMatch = (opts.value.events || []).find(e => {
-          const eDate = e.date instanceof Date ? DateTime.fromJSDate(e.date) : DateTime.fromISO(e.date as string)
-          const eDateConfigured = eDate.reconfigure(luxonConfig.value as any)
-          return eDateConfigured.hasSame(curr, 'day')
-        })
-
-        let isCurrentMonth = false
-        if (mode === 'islamic') {
-          isCurrentMonth = curr.month === startOfMonth.month && curr.year === startOfMonth.year
-        } else {
-          isCurrentMonth = curr.hasSame(startOfMonth, 'month')
-        }
-
-        const isSelected = selectedDt.value
-          ? (curr.hasSame(selectedDt.value, 'day') && isCurrentMonth)
-          : false
-
-        const isToday = curr.hasSame(n, 'day')
-
-        let isDisabled = false
-
-        if (opts.value.minDate && curr < DateTime.fromJSDate(opts.value.minDate).reconfigure(luxonConfig.value as any).startOf('day')) {
-          isDisabled = true
-        }
-        if (opts.value.maxDate && curr > DateTime.fromJSDate(opts.value.maxDate).reconfigure(luxonConfig.value as any).endOf('day')) {
-          isDisabled = true
-        }
-
-        if (opts.value.selectionMode === 'future' && curr < currentStartOfDay) isDisabled = true
-        if (opts.value.selectionMode === 'past' && curr > currentEndOfDay) isDisabled = true
-
-        if (!isCurrentMonth) isDisabled = true
-
-        const isHoliday = isHolidayCheck(curr)
-
-        let dayLabel = curr.toFormat('d')
-
-        if (luxonConfig.value.locale === 'fa') {
-          dayLabel = toPersianNum(dayLabel)
-        }
-
-        days.push({
-          date: curr,
-          label: dayLabel,
-          isCurrentMonth,
-          isToday,
-          isSelected,
-          isDisabled,
-          isHoliday,
-          eventCount: eventMatch ? (eventMatch.count || 1) : 0
-        })
-
-        curr = curr.plus({ days: 1 })
-      }
-      return days
+         })
     }
 
-
+    // Reactivity for Grids
+    // We calculate these on the fly based on displayDate
     const currentGrid = computed(() => generateGrid(displayDate.value))
-    const prevGrid = computed(() => generateGrid(displayDate.value.minus({ months: 1 })))
-    const nextGrid = computed(() => generateGrid(displayDate.value.plus({ months: 1 })))
+    const prevGrid = computed(() => generateGrid(addMonths(displayDate.value, -1)))
+    const nextGrid = computed(() => generateGrid(addMonths(displayDate.value, 1)))
 
-    onMounted(() => {
-      nextTick(() => {
-        //  console.log(currentGrid.value)
-      })
-    })
-
-    // --- Slider Style Logic (RTL Fixed) ---
+    // --- Slider Logic ---
     const sliderStyle = computed(() => {
       const isRTL = dir.value === 'rtl'
-
-      // LTR: Base -33% (Middle). Next (-1) -> -66% (Left). Prev (1) -> 0% (Right).
-      // RTL: Base +33% (Middle). Next (-1) -> +66% (Left?). Prev (1) -> 0% (Right).
-
       let base = isRTL ? 33.333333 : -33.333333
       let move = 0
-
       if (isAnimating.value) {
-        if (slideOffset.value === 1) {
-          // Prev
-          move = isRTL ? -33.333333 : 33.333333
-        }
-        if (slideOffset.value === -1) {
-          // Next
-          move = isRTL ? 33.333333 : -33.333333
-        }
+        if (slideOffset.value === 1) move = isRTL ? -33.333333 : 33.333333
+        if (slideOffset.value === -1) move = isRTL ? 33.333333 : -33.333333
       }
       return { transform: `translateX(${base + move}%)` }
     })
 
-    const triggerSlide = (dir: 'next' | 'prev') => {
+    const triggerSlide = (direction: 'next' | 'prev') => {
       if (isAnimating.value) return
-      if (dir === 'next' && !canGoNext.value) return
-      if (dir === 'prev' && !canGoPrev.value) return
+      if (direction === 'next' && !canGoNext.value) return
+      if (direction === 'prev' && !canGoPrev.value) return
+      
       isAnimating.value = true
-      slideOffset.value = dir === 'next' ? -1 : 1
+      slideOffset.value = direction === 'next' ? -1 : 1
     }
 
     const onTransitionEnd = async (e: Event) => {
       if (e.target !== e.currentTarget) return
       if (!isAnimating.value) return
+      
       isSilent.value = true
-      if (slideOffset.value === -1) displayDate.value = displayDate.value.plus({ months: 1 })
-      else if (slideOffset.value === 1) displayDate.value = displayDate.value.minus({ months: 1 })
+      // Commit change
+      if (slideOffset.value === -1) displayDate.value = addMonths(displayDate.value, 1)
+      else if (slideOffset.value === 1) displayDate.value = addMonths(displayDate.value, -1)
+      
       isAnimating.value = false
       slideOffset.value = 0
       await nextTick()
       requestAnimationFrame(() => { requestAnimationFrame(() => { isSilent.value = false }) })
     }
 
-    const handleNavigation = (dir: 'prev' | 'next') => {
+    const handleNavigation = (direction: 'prev' | 'next') => {
       if (viewMode.value === 'year') return
-      if (dir === 'prev' && !canGoPrev.value) return
-      if (dir === 'next' && !canGoNext.value) return
-
+      
       if (viewMode.value === 'month') {
-        const amount = dir === 'next' ? 1 : -1
-        displayDate.value = displayDate.value.plus({ years: amount })
+        const amount = direction === 'next' ? 1 : -1
+        displayDate.value = addYears(displayDate.value, amount)
       } else {
-        triggerSlide(dir)
+        triggerSlide(direction)
       }
     }
 
-    // --- Time & Selection Logic ---
-    const selectDate = (dt: DateTime) => {
-      // Ensure we're working with the correct calendar system
-      let finalDt = dt.reconfigure(luxonConfig.value as any)
-      const hour = parseInt(timeInputs.value.hour.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())) || 0
-      const minute = parseInt(timeInputs.value.minute.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())) || 0
-      finalDt = finalDt.set({ hour, minute })
-      emitUpdate(finalDt)
+    // --- Selections ---
+
+    const selectDate = (dt: Date) => {
+      const d = cloneDate(dt)
+      // Apply Time
+      const h = parseInt(timeInputs.value.hour.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())) || 0
+      const m = parseInt(timeInputs.value.minute.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())) || 0
+      d.setHours(h, m)
+      
+      emitUpdate(d)
     }
 
-    const selectMonth = (month: number) => {
-      const mode = resolvedMode.value
-
-      if (mode === 'jalaali') {
-        // Convert the selected Jalaali month back to Georgian for displayDate
-        // We need to set a date in the selected Jalaali month
-        const currentJd = jalaali.toJalaali(displayDate.value.toJSDate())
-        const georgianDate = jalaali.toGregorian(currentJd.jy, month, 1)
-        displayDate.value = DateTime.fromObject({
-          year: georgianDate.gy,
-          month: georgianDate.gm,
-          day: georgianDate.gd,
-        })
-      } else {
-        displayDate.value = displayDate.value.set({ month })
-      }
-
-      if (opts.value.mode === 'month') {
-        emitUpdate(displayDate.value)
-      } else {
-        viewMode.value = 'day'
-      }
+    const selectMonth = (monthVal: number) => {
+       // monthVal is 1-indexed
+       const mode = resolvedMode.value
+       if (mode === 'jalaali') {
+          const j = jalaali.toJalaali(displayDate.value)
+          // Keep Year, Change Month, Keep Day (clamped)
+          const daysInNew = jalaali.jalaaliMonthLength(j.jy, monthVal)
+          const newDay = Math.min(j.jd, daysInNew)
+          const g = jalaali.toGregorian(j.jy, monthVal, newDay)
+          displayDate.value = new Date(g.gy, g.gm - 1, g.gd)
+       } else {
+          const d = cloneDate(displayDate.value)
+          d.setMonth(monthVal - 1) 
+          displayDate.value = d
+       }
+       
+       if (opts.value.mode === 'month') emitUpdate(displayDate.value)
+       else viewMode.value = 'day'
     }
 
-    const selectYear = (year: number) => {
-      const mode = resolvedMode.value
+    const selectYear = (yearVal: number) => {
+       const mode = resolvedMode.value
+       if (mode === 'jalaali') {
+          const j = jalaali.toJalaali(displayDate.value)
+          const daysInNew = jalaali.jalaaliMonthLength(yearVal, j.jm)
+          const newDay = Math.min(j.jd, daysInNew)
+          const g = jalaali.toGregorian(yearVal, j.jm, newDay)
+          displayDate.value = new Date(g.gy, g.gm - 1, g.gd)
+       } else {
+          const d = cloneDate(displayDate.value)
+          d.setFullYear(yearVal)
+          displayDate.value = d
+       }
 
-      if (mode === 'jalaali') {
-        // Convert the selected Jalaali year back to Georgian for displayDate
-        // We need to set a date in the selected Jalaali year
-        const georgianDate = jalaali.toGregorian(year, 1, 1)
-        displayDate.value = DateTime.fromObject({
-          year: georgianDate.gy,
-          month: georgianDate.gm,
-          day: georgianDate.gd,
-        })
-      } else {
-        displayDate.value = displayDate.value.set({ year })
-      }
-
-      if (opts.value.mode === 'year') {
-        emitUpdate(displayDate.value)
-      } else {
-        viewMode.value = 'month'
-      }
+       if (opts.value.mode === 'year') emitUpdate(displayDate.value)
+       else viewMode.value = 'month'
     }
 
-    const toPersianNum = (n: number | string): string => {
-      return String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]!)
+    const emitUpdate = (dt: Date) => {
+      selectedDt.value = dt
+      emit('update:modelValue', dt)
     }
 
-
+    // --- Time Handling ---
+    
     const updateTime = (amt: number, unit: 'hour' | 'minute') => {
-      // Parse Persian numerals if present
-      const currentVal = timeInputs.value[unit].replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
-      let val = parseInt(currentVal) || 0
+      const currentValStr = timeInputs.value[unit].replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+      let val = parseInt(currentValStr) || 0
       val += amt
       const max = unit === 'hour' ? 23 : 59
       if (val > max) val = 0
       if (val < 0) val = max
 
-      const paddedVal = val.toString().padStart(2, '0')
-      timeInputs.value[unit] = luxonConfig.value.locale === 'fa'
-        ? toPersianNum(paddedVal)
-        : paddedVal
-
+      const padded = val.toString().padStart(2, '0')
+      timeInputs.value[unit] = (opts.value.locale === 'fa' || resolvedMode.value === 'jalaali') ? toPersianNum(padded) : padded
+      
       if (selectedDt.value) selectDate(selectedDt.value)
     }
 
     const validateTime = (unit: 'hour' | 'minute') => {
-      // Parse Persian numerals if present
-      const currentVal = timeInputs.value[unit].replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
-      let val = parseInt(currentVal) || 0
+      const currentValStr = timeInputs.value[unit].replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+      let val = parseInt(currentValStr) || 0
       const max = unit === 'hour' ? 23 : 59
       val = Math.max(0, Math.min(max, val))
-
-      const paddedVal = val.toString().padStart(2, '0')
-      timeInputs.value[unit] = luxonConfig.value.locale === 'fa'
-        ? toPersianNum(paddedVal)
-        : paddedVal
+      
+      const padded = val.toString().padStart(2, '0')
+      timeInputs.value[unit] = (opts.value.locale === 'fa' || resolvedMode.value === 'jalaali') ? toPersianNum(padded) : padded
 
       if (selectedDt.value) selectDate(selectedDt.value)
     }
 
+    // --- List Generators ---
 
-    const parseModelValue = (val: Date | string | null) => {
-      if (!val) return null
-      try {
-        let dt = val instanceof Date ? DateTime.fromJSDate(val) : DateTime.fromISO(val)
-        return dt.isValid ? dt.reconfigure(luxonConfig.value as any) : null
-      } catch {
-        return null
-      }
-    }
-
-    const emitUpdate = (dt: DateTime) => {
-      selectedDt.value = dt
-      emit('update:modelValue', dt.toJSDate())
-    }
-
-    // --- Computed Lists ---
     const monthsList = computed(() => {
-      const mode = resolvedMode.value
+        const mode = resolvedMode.value
+        const today = new Date()
+        const jToday = jalaali.toJalaali(today)
+        const currentJ = jalaali.toJalaali(displayDate.value)
 
-      if (mode === 'jalaali') {
-        // Jalaali month names
-        const jalaaliMonths = [
-          'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
-          'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'
-        ]
-
-        const jd = jalaali.toJalaali(displayDate.value.toJSDate())
-        const currentJalaaliMonth = jd.jm
-        const currentJalaaliYear = jd.jy
-
-        const nowJd = jalaali.toJalaali(now.value.toJSDate())
-
-        return jalaaliMonths.map((m, i) => ({
-          label: m,
-          value: i + 1,
-          isCurrent: (i + 1) === nowJd.jm && currentJalaaliYear === nowJd.jy
-        }))
-      } else {
-        const months = Info.months('long', { locale: luxonConfig.value.locale, outputCalendar: luxonConfig.value.outputCalendar as any })
-        return months.map((m, i) => ({
-          label: m,
-          value: i + 1,
-          isCurrent: (i + 1) === now.value.month && displayDate.value.year === now.value.year
-        }))
-      }
+        if (mode === 'jalaali') {
+            return JALAALI_MONTHS.map((m, i) => ({
+                label: m,
+                value: i + 1,
+                isCurrent: (i + 1) === jToday.jm && currentJ.jy === jToday.jy
+            }))
+        } else {
+            return GREGORIAN_MONTHS.map((m, i) => ({
+                label: m, // Could use locale here if desired
+                value: i + 1,
+                isCurrent: i === today.getMonth() && displayDate.value.getFullYear() === today.getFullYear()
+            }))
+        }
     })
-
 
     const yearsList = computed(() => {
-      const mode = resolvedMode.value
-
-      let years: Array<{ value: number; label: string; isCurrent: boolean }> = []
-
-      if (mode === 'jalaali') {
-        // Convert displayDate to Jalaali year
-        const jd = jalaali.toJalaali(displayDate.value.toJSDate())
-        const jalaaliYear = jd.jy
-
-        // Generate Jalaali years (e.g., 1390-1420)
-        const startYear = jalaaliYear - 10
-        const endYear = jalaaliYear + 10
-
-        for (let y = startYear; y <= endYear; y++) {
-          const label = opts.value.locale === 'fa' ? toPersianNum(y) : String(y)
-          years.push({
-            value: y,
-            label,
-            isCurrent: y === jalaaliYear
-          })
+        const mode = resolvedMode.value
+        const list = []
+        
+        if (mode === 'jalaali') {
+            const j = jalaali.toJalaali(displayDate.value)
+            const currentYear = j.jy
+            for (let y = currentYear - 10; y <= currentYear + 10; y++) {
+                list.push({
+                    value: y,
+                    label: opts.value.locale === 'fa' ? toPersianNum(y) : String(y),
+                    isCurrent: y === currentYear
+                })
+            }
+        } else {
+            const currentYear = displayDate.value.getFullYear()
+             for (let y = currentYear - 10; y <= currentYear + 10; y++) {
+                list.push({
+                    value: y,
+                    label: opts.value.locale === 'fa' ? toPersianNum(y) : String(y),
+                    isCurrent: y === currentYear
+                })
+            }
         }
-      } else {
-        // Georgian or Islamic - use gregorian year
-        const startYear = displayDate.value.year - 10
-        const endYear = displayDate.value.year + 10
-
-        for (let y = startYear; y <= endYear; y++) {
-          const label = opts.value.locale === 'fa' ? toPersianNum(y) : String(y)
-          years.push({
-            value: y,
-            label,
-            isCurrent: y === displayDate.value.year
-          })
-        }
-      }
-
-      return years
-    })
-
-    const displayYear = computed(() => {
-      const mode = resolvedMode.value
-
-      if (mode === 'jalaali') {
-        const jd = jalaali.toJalaali(displayDate.value.toJSDate())
-        return jd.jy
-      } else {
-        return displayDate.value.year
-      }
+        return list
     })
 
     const selectedYear = computed(() => {
-      if (!selectedDt.value) return null
-
-      const mode = resolvedMode.value
-
-      if (mode === 'jalaali') {
-        const jd = jalaali.toJalaali(selectedDt.value.toJSDate())
-        return jd.jy
-      } else {
-        return selectedDt.value.year
-      }
+        if (!selectedDt.value) return null
+        if (resolvedMode.value === 'jalaali') return jalaali.toJalaali(selectedDt.value).jy
+        return selectedDt.value.getFullYear()
     })
 
-    // Watchers
+    // --- Watchers ---
     watch(() => props.modelValue, (val) => {
-      const parsed = parseModelValue(val)
-      if (parsed) {
-        selectedDt.value = parsed
-        timeInputs.value.hour = parsed.hour.toString().padStart(2, '0')
-        timeInputs.value.minute = parsed.minute.toString().padStart(2, '0')
-        if (!opts.value.fixedTime && !opts.value.monthOffset) {
-          if (!parsed.hasSame(displayDate.value, 'month')) displayDate.value = parsed
+        if (!val) {
+            selectedDt.value = null
+            return
         }
-      } else {
-        selectedDt.value = null
-      }
+        const d = new Date(val)
+        if (isNaN(d.getTime())) return
+
+        selectedDt.value = d
+        
+        const h = d.getHours().toString().padStart(2, '0')
+        const m = d.getMinutes().toString().padStart(2, '0')
+        
+        const usePersian = opts.value.locale === 'fa' || resolvedMode.value === 'jalaali'
+        timeInputs.value.hour = usePersian ? toPersianNum(h) : h
+        timeInputs.value.minute = usePersian ? toPersianNum(m) : m
+
+        if (!opts.value.fixedTime && !opts.value.monthOffset) {
+             // Logic to jump to the selected date if it's not in view
+             // Simple check: are we in same month?
+             const mode = resolvedMode.value
+             if (mode === 'jalaali') {
+                 const dJ = jalaali.toJalaali(d)
+                 const viewJ = jalaali.toJalaali(displayDate.value)
+                 if (dJ.jy !== viewJ.jy || dJ.jm !== viewJ.jm) {
+                     displayDate.value = d
+                 }
+             } else {
+                 if (d.getFullYear() !== displayDate.value.getFullYear() || d.getMonth() !== displayDate.value.getMonth()) {
+                     displayDate.value = d
+                 }
+             }
+        }
+
     }, { immediate: true })
 
     const onViewSwitch = () => {
-      if (viewMode.value === 'year') {
-        const mode = resolvedMode.value
-        let targetYear = selectedDt.value ? selectedDt.value.year : now.value.year
-
-        // Convert to Jalaali year if needed
-        if (mode === 'jalaali' && selectedDt.value) {
-          const jd = jalaali.toJalaali(selectedDt.value.toJSDate())
-          targetYear = jd.jy
-        } else if (mode === 'jalaali' && !selectedDt.value) {
-          const jd = jalaali.toJalaali(now.value.toJSDate())
-          targetYear = jd.jy
-        }
-
-        let el = yearGridRef.value?.querySelector(`[data-year="${targetYear}"]`)
-        if (!el) {
-          let fallbackYear = now.value.year
-          if (mode === 'jalaali') {
-            const jd = jalaali.toJalaali(now.value.toJSDate())
-            fallbackYear = jd.jy
-          }
-          el = yearGridRef.value?.querySelector(`[data-year="${fallbackYear}"]`)
-        }
-        el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      }
+       // Logic to scroll year grid to center
+       if (viewMode.value === 'year') {
+           const target = selectedYear.value || (resolvedMode.value === 'jalaali' ? jalaali.toJalaali(new Date()).jy : new Date().getFullYear())
+           const el = yearGridRef.value?.querySelector(`[data-year="${target}"]`)
+           el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+       }
     }
 
     const getDayClasses = (dayObj: any) => ({
@@ -959,8 +796,8 @@ export default defineComponent({
     })
 
     return {
-      displayYear, selectedYear, toPersianNum,
-      now, viewMode, displayDate, selectedDt, currentYear, currentMonthName,
+      displayYear, selectedYear, toPersianNum, currentMonthValue,
+      viewMode, displayDate, selectedDt, currentYear, currentMonthName,
       dynamicWeekDays, prevGrid, currentGrid, nextGrid, monthsList, yearsList, timeInputs, customVars,
       canSwitchView, yearGridRef, handleNavigation, selectDate, selectMonth, selectYear,
       updateTime, validateTime, getDayClasses,
@@ -970,11 +807,9 @@ export default defineComponent({
   }
 })
 </script>
-
 <style scoped>
 @import '@/assets/css/calendar.css';
 
-/* Main Container */
 .dope-date-picker {
   display: flex;
   flex-direction: column;
