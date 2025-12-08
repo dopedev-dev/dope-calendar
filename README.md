@@ -67,10 +67,8 @@ Huge thanks to our amazing sponsors! Your support helps keep this project alive 
       </a>
     </td>
     <td align="center">
-      <a href="https://nobeen.ir">
-        <div style="display:flex; align-items:center;justify-content:center; height:200px; width:200px;">
+      <a href="https://i.ibb.co/zhXybDsM/nobeen.png">
          <img src="https://nobeen.ir/nobin-logo.png" width="200" alt="Nobeen" style="padding: 20px; border: 1px solid #eee; border-radius: 12px; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-         </div>
         <br>
         <strong>Nobeen</strong>
       </a>
