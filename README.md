@@ -58,16 +58,20 @@ npm run lint
 Huge thanks to our amazing sponsors! Your support helps keep this project alive and actively maintained.
 
 <div align="center" style="display: flex; justify-content: center; gap: 40px; flex-wrap: wrap;">
+<div>
   <a href="https://github.com/wenex-org">
     <img src="https://avatars.githubusercontent.com/u/124876522?s=200&v=4" width="200" alt="Wenex" style="padding: 20px; border: 1px solid #eee; border-radius: 12px; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
     <br>
     <strong>Wenex</strong>
   </a>
+</div>
+<div>
   <a href="https://nobeen.ir">
     <img src="https://nobeen.ir/nobin-logo.png" width="200" alt="Wenex" style="padding: 20px; border: 1px solid #eee; border-radius: 12px; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
     <br>
     <strong>Nobeen</strong>
   </a>
+</div>
 </div>
 
 # License
