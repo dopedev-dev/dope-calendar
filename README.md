@@ -157,4 +157,6 @@ DopeDatePicker VariablesCSS:root {
   --dp-text: #f9fafb;
   --dp-primary: #60a5fa;
 }
-❤️ SponsorsHuge thanks to our amazing sponsors! Your support helps keep this project alive and actively maintained.<div align="center" style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;"><a href="https://github.com/wenex-org" style="text-decoration: none;"><div style="display: flex; flex-direction: column; align-items: center; padding: 20px; border: 1px solid #eee; border-radius: 12px; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 200px;"><img src="https://avatars.githubusercontent.com/u/124876522?s=200&v=4" width="80" alt="Wenex" style="border-radius: 50%; margin-bottom: 10px;"><strong style="color: #333; font-size: 1.1rem;">Wenex</strong></div></a><a href="#" style="text-decoration: none;"><div style="display: flex; flex-direction: column; align-items: center; padding: 20px; border: 1px solid #eee; border-radius: 12px; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 200px;"><img src="https://www.google.com/search?q=https://via.placeholder.com/80x80%3Ftext%3D+" width="80" alt="Sponsor" style="border-radius: 50%; margin-bottom: 10px;"><strong style="color: #333; font-size: 1.1rem;">Become a Sponsor</strong></div></a></div>LicenseThis project is licensed under the Apache-2.0 License - SEE the LICENSE file for details.
+
+
+## ❤️ Sponsors 
