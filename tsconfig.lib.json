@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.app.json",
+  "include": [
+    "src/index.ts",
+    "src/components/**/*.vue",
+    "src/components/**/*.ts",
+    "src/composables/**/*.ts"
+  ],
+  "exclude": [
+    "env.d.ts",
+    "src/App.vue",
+    "src/main.ts",
+    "src/**/__tests__/*"
+  ]
+}

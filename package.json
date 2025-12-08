@@ -1,6 +1,6 @@
 {
   "name": "dope-calendar",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "author": "Amir S. <amirsafaricg1380@gmail.com>",
   "contributors": [
     "Vahid V. <vhid.vz@gmail.com>"
@@ -12,13 +12,13 @@
   "main": "./dist/dope-calendar.umd.cjs",
   "module": "./dist/dope-calendar.js",
   "types": "./dist/index.d.ts",
-"exports": {
+  "exports": {
     ".": {
-      "types": "./dist/index.d.ts",  
+      "types": "./dist/index.d.ts",
       "import": "./dist/dope-calendar.js",
       "require": "./dist/dope-calendar.umd.cjs"
     },
-    "./style.css": "./dist/dope-calendar.css"
+    "./calendar.css": "./dist/calendar.css"
   },
   "license": "Apache-2.0",
   "scripts": {
@@ -33,18 +33,15 @@
     "format": "prettier --write src/"
   },
   "peerDependencies": {
-    "vue": "^3.5.22",
-    "luxon": "^3.7.2"
+    "vue": "^3.5.22"
   },
   "dependencies": {
     "jalaali-js": "^1.2.8"
   },
   "devDependencies": {
     "@prettier/plugin-oxc": "^0.0.4",
-    "@tailwindcss/vite": "^4.1.17",
     "@tsconfig/node22": "^22.0.2",
     "@types/jalaali-js": "^1.2.0",
-    "@types/luxon": "^3.7.1",
     "@types/node": "^22.18.11",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vue/eslint-config-prettier": "^10.2.0",
@@ -57,7 +54,6 @@
     "npm-run-all2": "^8.0.4",
     "oxlint": "~1.23.0",
     "prettier": "3.6.2",
-    "tailwindcss": "^4.1.17",
     "typescript": "~5.9.0",
     "vite": "^7.1.11",
     "vite-plugin-dts": "^4.5.4",
