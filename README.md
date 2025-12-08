@@ -64,7 +64,7 @@ Huge thanks to our amazing sponsors! Your support helps keep this project alive 
     <strong>Wenex</strong>
   </a>
 </div>
-<div align="center" style="margin-top:20px">
+<div align="center" style="padding-top:20px">
   <a href="https://nobeen.ir">
     <img src="https://nobeen.ir/nobin-logo.png" width="200" alt="Wenex" style="padding: 20px; border: 1px solid #eee; border-radius: 12px; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
     <br>
