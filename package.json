@@ -12,11 +12,11 @@
   "main": "./dist/dope-calendar.umd.cjs",
   "module": "./dist/dope-calendar.js",
   "types": "./dist/index.d.ts",
-  "exports": {
+"exports": {
     ".": {
+      "types": "./dist/index.d.ts",  
       "import": "./dist/dope-calendar.js",
-      "require": "./dist/dope-calendar.umd.cjs",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/dope-calendar.umd.cjs"
     },
     "./style.css": "./dist/dope-calendar.css"
   },

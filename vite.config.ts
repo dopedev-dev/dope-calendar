@@ -11,7 +11,8 @@ export default defineConfig({
     tailwindcss(),
     dts({
       insertTypesEntry: true,
-      rollupTypes: true // Bundles types into a single file
+      rollupTypes: true,
+      exclude: ['env.d.ts', 'src/**/__tests__/*']
     })
   ],
   resolve: {
