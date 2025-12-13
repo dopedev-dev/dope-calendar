@@ -592,17 +592,14 @@ const processedHolidays = computed(() => {
            const normalized = d.replace(/\//g, '-')
            
            // Check if it looks like a date string
-           if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(normalized)) {
-               const parts = normalized.split('-').map((p: string) => parseInt(p, 10))
-               
-               // Convert Jalaali (Year, Month, Day) -> Gregorian
-               // parts[0] = Year, parts[1] = Month, parts[2] = Day
-               const g = jalaali.toGregorian(parts[0], parts[1], parts[2])
-               
-               // Return Key: Year-MonthIndex-Day
-               // Note: g.gm is 1-12, but JS Date Month is 0-11, so we subtract 1
-               return `${g.gy}-${g.gm - 1}-${g.gd}`
-           }
+if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(normalized)) {
+    const parts = normalized.split(/[-/]/).map((p: string) => parseInt(p, 10))
+    
+    // CHANGE THIS LINE:
+    const g = jalaali.toGregorian(parts[0]!, parts[1]!, parts[2]!)
+    
+    return `${g.gy}-${g.gm - 1}-${g.gd}`
+}
         }
 
         // 2. HANDLE STANDARD DATE OBJECTS (e.g. new Date('2025-12-25'))
@@ -613,7 +610,7 @@ const processedHolidays = computed(() => {
         return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
       })
 
-      return new Set(keys.filter((k) => k))
+return new Set(keys.filter((k: any) => k))
     })
 
     const isHoliday = (date: Date) => {
@@ -1024,18 +1021,20 @@ const handleDragEnd = (event: MouseEvent | TouchEvent) => {
           const visualStartIndex = finalStartDayIndex !== -1 ? finalStartDayIndex : targetDayIndex;
           
           let leftPos = 0;
-          if (config.value.dir === 'rtl') {
-             const headerChildren = Array.from(calendarHeader.value.children) as HTMLElement[];
-             const targetHeader = headerChildren[visualStartIndex];
-             if(targetHeader) {
-                 leftPos = targetHeader.getBoundingClientRect().left;
-             }
-          } else {
-             leftPos = containerRect.left + (visualStartIndex * dayCellWidth.value) - calendarContent.value.scrollLeft;
-          }
+        if (config.value.dir === 'rtl') {
+     // Use ternary to safely get children or empty array
+     const headerChildren = calendarHeader.value ? Array.from(calendarHeader.value.children) as HTMLElement[] : [];
+     const targetHeader = headerChildren[visualStartIndex];
+     if(targetHeader) {
+         leftPos = targetHeader.getBoundingClientRect().left;
+     }
+} else {
+     leftPos = containerRect.left + (visualStartIndex * dayCellWidth.value) - calendarContent.value.scrollLeft;
+}
 
-          const headerChildren = Array.from(calendarHeader.value.children) as HTMLElement[];
-          const targetHeader = headerChildren[visualStartIndex];
+        const headerChildren = calendarHeader.value ? Array.from(calendarHeader.value.children) as HTMLElement[] : [];
+const targetHeader = headerChildren[visualStartIndex];
+
           if(targetHeader) {
               leftPos = targetHeader.getBoundingClientRect().left;
           }
@@ -1291,6 +1290,7 @@ const handleHorizontalResizeStart = (
   height: 100%;
   overflow: hidden;
   font-size: 12px;
+  max-height: 100%;
 }
 
 .calendar-wrapper {
