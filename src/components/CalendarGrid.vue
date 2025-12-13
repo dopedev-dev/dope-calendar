@@ -63,12 +63,13 @@
             }" :style="getItemStyle(item, index)"
               @mousedown="handleDragStart($event, item, index)" @touchstart="handleDragStart($event, item, index)"
               @click="handleItemClick($event, index)">
-              <div class="default-item">
+              <div  class="default-item">
                 <div v-if="selectedItemIndex === index" class="resize-handle-top" @touchstart.stop="handleResizeStart($event, item, 'top')"
                   @mousedown.stop="handleResizeStart($event, item, 'top')"></div>
 
-                <slot name="item" :item="item">
-                </slot>
+               <div class="item-content">
+    <slot name="item" :item="item"></slot>
+  </div>
                 
                 <div v-if="selectedItemIndex === index" class="resize-handle-left"
                   @touchstart.stop="handleHorizontalResizeStart($event, item, 'left')"
@@ -1282,16 +1283,7 @@ const handleHorizontalResizeStart = (
   height: 100%;
 }
 
-.default-item {
-  background-color: rgba(66, 133, 244, 0.8);
-  color: white;
-  padding: 4px;
-  border-radius: 4px;
-  height: 100%;
-  overflow: hidden;
-  font-size: 12px;
-  max-height: 100%;
-}
+
 
 .calendar-wrapper {
   width: 100%;
@@ -1556,5 +1548,48 @@ const handleHorizontalResizeStart = (
 
 .scroll-disabled * {
   pointer-events: auto;
+}
+
+.item-container{
+  margin: 0px !important;
+  padding: 0px !important
+}
+.default-item {
+  padding: 0px !important;
+  height: 100%;
+  margin: 0px !important;
+  overflow: hidden; 
+  font-size: 12px;
+  position: relative; 
+}
+
+/* NEW CLASS: This protects your layout */
+.item-content {
+  width: 100%;
+  height: 100%;
+  padding: 0px;
+  margin: 0px;
+  /* Ensure this wrapper doesn't add scrollbars */
+  overflow: hidden; 
+}
+.grid-item-content {
+  height: 100% !important;
+  max-height: 100% !important;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.75rem;
+  color: white;
+  overflow: hidden;
+}
+/* DEEP SELECTOR: Forces user content to behave */
+/* This applies to the direct child element provided by the user */
+.item-content :deep(> *) {
+  margin: 0 !important;    
+  padding: 0px !important;         /* Kill external margins that cause overflow */
+  box-sizing: border-box !important; /* Ensure borders/padding are included in height */
+  height: 100%;                     /* Fill the wrapper */
+  width: 100%;                      /* Fill the wrapper */
 }
 </style>

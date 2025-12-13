@@ -83,7 +83,7 @@ const calendarGridOptions = {
             :options="calendarGridOptions"
           >
             <template #item="{ item }">
-              <div class="default-item">
+              <div class="item">
                 <strong>{{ item.title }}</strong>
                 <span>
                   {{ item.start.getHours() }}:{{ item.start.getMinutes().toString().padStart(2, '0') }} - 
@@ -159,33 +159,15 @@ h2 {
 }
 
 /* Custom styles for grid items inside the slot */
-.grid-item-content {
-  height: 100% !important;
-  max-height: 100% !important;
-  width: 100%;
-  padding: 4px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 0.75rem;
-  color: white;
-  overflow: hidden;
-}
 
-.default-item {
-  width: 100%;
-  height: 100%;
-  /* 1. This ensures padding & border are INCLUDED in the 100% height */
-  box-sizing: border-box; 
-  /* 2. Prevents inner text from spilling out if the item is small */
-  overflow: hidden; 
-  /* 3. Ensures no external spacing pushes it out */
-  margin: 0; 
-  
-  /* ... existing styles (background, padding, etc.) ... */
-  display: flex;
-  flex-direction: column;
-  padding: 2px 4px; /* Example padding */
+
+.item {
+  background-color: rgba(66, 133, 244, 0.8);
+  color: white;
   border-radius: 4px;
+  height: 100%;
+  overflow: hidden; 
+  font-size: 12px;
+  position: relative; 
 }
 </style>
