@@ -67,7 +67,7 @@
               @mousedown="handleDragStart($event, item, index)" @touchstart="handleDragStart($event, item, index)"
               @click="handleItemClick($event, index)">
               <div class="default-item">
-                <div class="resize-handle-top" @touchstart.stop="handleResizeStart($event, item, 'top')"
+                <div v-if="selectedItemIndex === index" class="resize-handle-top" @touchstart.stop="handleResizeStart($event, item, 'top')"
                   @mousedown.stop="handleResizeStart($event, item, 'top')"></div>
 
                 <slot name="item" :item="item">
@@ -798,11 +798,10 @@ export default defineComponent({
       }
     }
 
-    const handleDragStart = (event: MouseEvent | TouchEvent, item: any, index: number) => {
+const handleDragStart = (event: MouseEvent | TouchEvent, item: any, index: number) => {
       if (!config.value.editable) return
       event.preventDefault()
 
-      // Selection Check: Must click once to select before dragging
       if (selectedItemIndex.value !== index) {
         selectedItemIndex.value = index
         return
@@ -811,11 +810,23 @@ export default defineComponent({
       const trueIndex = item.originalIndex
       const originalItem = props.modelValue[trueIndex]
 
-      draggingItem.value = { item: originalItem, originalIndex: trueIndex }
-      
       draggedElement.value = event.currentTarget as HTMLElement
+      
       const clientX = 'touches' in event ? (event.touches[0]?.clientX || 0) : event.clientX
       const clientY = 'touches' in event ? (event.touches[0]?.clientY || 0) : event.clientY
+      
+      // Store initial scroll positions to calculate accurate Delta later
+      const initialScrollTop = calendarContent.value?.scrollTop || 0
+      const initialScrollLeft = calendarContent.value?.scrollLeft || 0
+
+      draggingItem.value = { 
+        item: originalItem, 
+        originalIndex: trueIndex,
+        // Store these for the Delta calculation in DragEnd
+        initialScrollTop,
+        initialScrollLeft
+      }
+      
       dragStartX.value = clientX
       dragStartY.value = clientY
       draggedElement.value.classList.add('dragging')
@@ -844,8 +855,7 @@ export default defineComponent({
       document.addEventListener('touchend', handleDragEnd)
     }
 
-
-    const handleDragEnd = (event: MouseEvent | TouchEvent) => {
+const handleDragEnd = (event: MouseEvent | TouchEvent) => {
       if (!draggingItem.value || !calendarContent.value || !contentContainer.value) return
       event.preventDefault()
 
@@ -872,15 +882,15 @@ export default defineComponent({
           clientY <= rect.bottom
       }
 
+      // Valid drop check
       let targetDayIndex = selectedIndex.value
-      const isValidDrop = isInsideContainer && targetDayIndex !== -1 && targetDayIndex >= 0 && targetDayIndex < monthDays.value.length
-
-      const targetDayData = isValidDrop ? monthDays.value[targetDayIndex] : null
+      const isValidDrop = isInsideContainer && targetDayIndex !== -1
 
       let updatedItems: any[] = []
       let targetRect = { top: 0, left: 0, width: 0, height: 0 }
 
-      if (!isValidDrop || !targetDayData) {
+      if (!isValidDrop) {
+        // Snap back if dropped outside
         if (draggedElement.value) {
           const rect = draggedElement.value.getBoundingClientRect()
           targetRect = { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
@@ -888,52 +898,54 @@ export default defineComponent({
       } else {
         const originalItem = draggingItem.value.item
         const originalDurationMs = originalItem.end.getTime() - originalItem.start.getTime()
+        const currentScrollTop = calendarContent.value.scrollTop
+        const currentScrollLeft = calendarContent.value.scrollLeft
+
+        // --- 1. Calculate Horizontal Delta (Day Shift) ---
+        // How many pixels did we move horizontally?
+        // We add the scroll difference to handle if the user scrolled sideways while dragging
+        const scrollDiffX = currentScrollLeft - (draggingItem.value.initialScrollLeft || 0)
+        const deltaX = (clientX - dragStartX.value) + scrollDiffX
+        
+        // Convert pixels to Days
+        const dayWidth = dayCellWidth.value // Uses the strict ref we added earlier
+        let dayShift = Math.round(deltaX / dayWidth)
+
+        // RTL Correction: In RTL, dragging Left (negative X) means moving to the NEXT day (positive index)
+        // Dragging Right (positive X) means moving to PREV day (negative index)
+        if (config.value.dir === 'rtl') {
+           dayShift = dayShift * -1
+        }
+
+        // --- 2. Calculate Vertical Delta (Time Shift) ---
+        // How many pixels did we move vertically?
+        const scrollDiffY = currentScrollTop - (draggingItem.value.initialScrollTop || 0)
+        const deltaY = (clientY - dragStartY.value) + scrollDiffY
 
         const totalHours = config.value.endHour - config.value.startHour
         const contentHeight = dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
-
-        const calendarRect = calendarContent.value.getBoundingClientRect()
-        const dropY = clientY - calendarRect.top + calendarContent.value.scrollTop
-        const adjustedDropY = dropY - topPadding.value
-        
         const pixelsPerMinute = contentHeight / (totalHours * 60)
-        const offsetMinutes = adjustedDropY / pixelsPerMinute
         
-        const clampedMinutes = Math.max(0, Math.min(offsetMinutes, totalHours * 60))
-        const adjustedHourOffset = Math.floor(clampedMinutes / 60)
-        const adjustedMinuteOffset = Math.round(clampedMinutes % 60)
+        // Convert pixels to Minutes
+        const minuteShift = deltaY / pixelsPerMinute
+        // Snap minutes to minTime (e.g. 15 min intervals)
+        const snappedMinuteShift = Math.round(minuteShift / config.value.minTime) * config.value.minTime
 
-        let newStartDt: DateTime
+        // --- 3. Apply Shifts to Create New Dates ---
+        const originalStart = DateTime.fromJSDate(originalItem.start)
+        
+        // Apply Day Shift
+        // Note: We simply add days. Luxon handles month/year roll-overs automatically.
+        let newStartDt = originalStart.plus({ days: dayShift })
 
-        if (config.value.calendar === 'jalaali') {
-          newStartDt = DateTime.fromObject(
-            {
-              day: targetDayData.day as number,
-              month: (targetDayData as any).month,
-              year: (targetDayData as any).year,
-              hour: config.value.startHour + adjustedHourOffset,
-              minute: adjustedMinuteOffset,
-              second: 0,
-              millisecond: 0
-            },
-            { zone: 'local', numberingSystem: 'latn', outputCalendar: 'persian' }
-          )
-        } else {
-          newStartDt = DateTime.fromObject({
-            day: targetDayData.day as number,
-            month: (targetDayData as any).month,
-            year: (targetDayData as any).year,
-            hour: config.value.startHour + adjustedHourOffset,
-            minute: adjustedMinuteOffset,
-            second: 0,
-            millisecond: 0
-          })
-        }
+        // Apply Time Shift
+        newStartDt = newStartDt.plus({ minutes: snappedMinuteShift })
 
-        const newStart = newStartDt.toJSDate()
-        const newEnd = new Date(newStart.getTime() + originalDurationMs)
+        // Hard limits check (StartHour / EndHour)
+        // Ensure the time doesn't go before startHour or after endHour visually if needed, 
+        // but typically calendars allow dragging time freely.
 
-        const adjustedStart = new Date(newStart.getTime() - (originalDurationMs / 2))
+        const adjustedStart = newStartDt.toJSDate()
         const adjustedEnd = new Date(adjustedStart.getTime() + originalDurationMs)
 
         const originalIndex = draggingItem.value.originalIndex
@@ -949,12 +961,15 @@ export default defineComponent({
           return item
         })
 
+        // --- 4. Calculate Visual Target for Snap Animation ---
         if (calendarContent.value && calendarHeader.value) {
           const containerRect = calendarContent.value.getBoundingClientRect()
-
+          
+          // Re-calculate visual position based on the NEW Calculated Date
           const startDt = DateTime.fromJSDate(adjustedStart)
           const endDt = DateTime.fromJSDate(adjustedEnd)
 
+          // Vertical Position
           const dayStartOf = startDt.startOf('day').plus({ hours: config.value.startHour })
           const itemStartOffsetMin = startDt.diff(dayStartOf, 'minutes').minutes
           const topOffsetPx = (itemStartOffsetMin / (totalHours * 60)) * contentHeight
@@ -963,6 +978,18 @@ export default defineComponent({
           const durationMin = tempEndDt.diff(startDt, 'minutes').minutes
           const heightPx = (durationMin / (totalHours * 60)) * contentHeight
 
+          // Horizontal Position
+          // Find the specific column index for the NEW Start Date
+          const finalStartDayIndex = monthDays.value.findIndex((d) => {
+             const dDate = new Date(d.date);
+             return dDate.getDate() === adjustedStart.getDate() && 
+                    dDate.getMonth() === adjustedStart.getMonth() &&
+                    dDate.getFullYear() === adjustedStart.getFullYear();
+          });
+
+          // Fallback if date is dragged outside current view range
+          const visualStartIndex = finalStartDayIndex !== -1 ? finalStartDayIndex : targetDayIndex;
+
           let daySpan = 1
           if (!startDt.hasSame(endDt, 'day')) {
             const diff = endDt.diff(startDt, 'days').days
@@ -970,27 +997,28 @@ export default defineComponent({
           }
 
           const headerChildren = Array.from(calendarHeader.value.children) as HTMLElement[]
-
+          const safeStartIndex = Math.max(0, Math.min(visualStartIndex, headerChildren.length - 1))
+          
           let targetLeft = 0
           let targetWidth = 0
 
           if (config.value.dir === 'rtl') {
-            const rightMostIndex = targetDayIndex
-            const leftMostIndex = Math.min(headerChildren.length - 1, targetDayIndex + daySpan - 1)
-            const rightCellRect = headerChildren[rightMostIndex]?.getBoundingClientRect()
-            const leftCellRect = headerChildren[leftMostIndex]?.getBoundingClientRect()
-            if (leftCellRect && rightCellRect) {
-              targetLeft = leftCellRect.left
-              targetWidth = rightCellRect.right - leftCellRect.left
+            const rightMostIndex = safeStartIndex
+            const leftMostIndex = Math.max(0, safeStartIndex - (daySpan - 1))
+            if (headerChildren[rightMostIndex] && headerChildren[leftMostIndex]) {
+                const rightRect = headerChildren[rightMostIndex].getBoundingClientRect()
+                const leftRect = headerChildren[leftMostIndex].getBoundingClientRect()
+                targetLeft = leftRect.left
+                targetWidth = rightRect.right - leftRect.left
             }
           } else {
-            const leftMostIndex = targetDayIndex
-            const rightMostIndex = Math.min(headerChildren.length - 1, targetDayIndex + daySpan - 1)
-            const leftCellRect = headerChildren[leftMostIndex]?.getBoundingClientRect()
-            const rightCellRect = headerChildren[rightMostIndex]?.getBoundingClientRect()
-            if (leftCellRect && rightCellRect) {
-              targetLeft = leftCellRect.left
-              targetWidth = rightCellRect.right - leftCellRect.left
+            const leftMostIndex = safeStartIndex
+            const rightMostIndex = Math.min(headerChildren.length - 1, safeStartIndex + (daySpan - 1))
+            if (headerChildren[leftMostIndex] && headerChildren[rightMostIndex]) {
+                const leftRect = headerChildren[leftMostIndex].getBoundingClientRect()
+                const rightRect = headerChildren[rightMostIndex].getBoundingClientRect()
+                targetLeft = leftRect.left
+                targetWidth = rightRect.right - leftRect.left
             }
           }
 
@@ -1004,8 +1032,7 @@ export default defineComponent({
       }
 
       if (dragGhost.value) {
-        void dragGhost.value.offsetHeight;
-
+        void dragGhost.value.offsetHeight; 
         dragGhost.value.style.transition = 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)'
         dragGhost.value.style.top = `${targetRect.top}px`
         dragGhost.value.style.left = `${targetRect.left}px`
@@ -1045,7 +1072,6 @@ export default defineComponent({
         resetDrag()
       }
     }
-
 
     const resetDrag = () => {
       draggingItem.value = null
@@ -1458,7 +1484,6 @@ const handleHorizontalResizeStart = (
   user-select: none;
   box-sizing: border-box;
   transition: box-shadow 0.2s ease, transform 0.2s ease, top 0.3s ease, left 0.3s ease;
-  cursor: grab;
 }
 
 .calendar-item-wrapper.no-transition {
