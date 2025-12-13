@@ -1,13 +1,17 @@
 <template>
   <div :dir="config.dir" ref="calendar" class="calendar-wrapper dope-calendar-grid">
     <div @click="deselectItems" @mousedown.stop="deselectItems" class="header-container">
-      <div class="header-padding"></div>
+      <div class="header-padding" :style="{ width: `${dayCellWidth}px`, minWidth: `${dayCellWidth}px` }"></div>
+      
       <div ref="calendarHeader" @scroll="handleHeaderScroll" class="calendar-header hide-scrollbar">
         <div v-for="(day, index) in monthDays" :key="index" :class="{
           'day-cell': true,
           'weekend-day': isWeekend(day.weekDay) || isHoliday(day.date),
           'current-day': isCurrentDay(day.date)
-        }" :style="{ width: `${100 / monthDays.length}%` }">
+        }" :style="{ 
+             minWidth: `${dayCellWidth}px`,
+             width: `${dayCellWidth}px` 
+           }">
           <div class="day-number" :style="{
             color: isHoliday(day.date) || isWeekend(day.weekDay)
               ? 'var(--dc-weekend-day-color)'
@@ -29,17 +33,20 @@
         </div>
       </div>
     </div>
+
     <div ref="contentContainer" class="content-container hide-scrollbar">
       <div :class="{ 'hours-column': true, 'hide-scrollbar': true, 'zoomable': config.zoom }"
-        :style="{ height: calendarBodyHeight }" @mousedown="handleZoomStart" @touchstart="handleZoomStart">
+        :style="{ height: calendarBodyHeight, width: `${dayCellWidth}px`, minWidth: `${dayCellWidth}px` }" 
+        @mousedown="handleZoomStart" @touchstart="handleZoomStart">
         <div v-for="(hour, index) in dayHoursList" :key="index" class="hour-label">
           {{ hour.display }}
         </div>
       </div>
+      
       <div class="calendar-body hide-scrollbar" @scroll="handleContentScroll" @click="handleCalendarClick"
         ref="calendarContent" :style="{ height: calendarBodyHeight }">
 
-        <div class="grid-content" :style="{ minWidth: calendarBodyWidth, width: '100%' }">
+        <div class="grid-content" :style="{ minWidth: calendarBodyWidth, width: calendarBodyWidth }">
           <div class="horizontal-grid">
             <div v-for="(hour, index) in dayHoursList" :key="index">
               <div class="grid-line-h"></div>
@@ -65,6 +72,7 @@
 
                 <slot name="item" :item="item">
                 </slot>
+                
                 <div v-if="selectedItemIndex === index" class="resize-handle-left"
                   @touchstart.stop="handleHorizontalResizeStart($event, item, 'left')"
                   @mousedown.stop="handleHorizontalResizeStart($event, item, 'left')"></div>
@@ -87,17 +95,12 @@
     </div>
   </div>
 </template>
+
 <script lang="ts">
 import { type PropType, ref, defineComponent, watch, onMounted, computed, nextTick, type StyleValue } from 'vue'
 import jalaali from 'jalaali-js'
 import { DateTime } from 'luxon'
 import { useDragToScroll } from '@/composables/useDragToScroll'
-
-interface CalendarItem {
-  start: Date
-  end: Date
-  [key: string]: any
-}
 
 interface CalendarOptions {
   calendar?: 'jalaali' | 'georgian'
@@ -120,8 +123,8 @@ interface CalendarOptions {
 export default defineComponent({
   name: 'CalendarGrid',
   props: {
-    option: {
-      type: Object as PropType<CalendarOptions>,
+    options: {
+      type: Object as PropType<CalendarOptions | any>,
       default: () => ({})
     },
     modelValue: {
@@ -156,7 +159,7 @@ export default defineComponent({
         format: '24h',
         holidays: []
       }
-      return { ...defaults, ...props.option }
+      return { ...defaults, ...props.options }
     })
 
     useDragToScroll(calendarHeader)
@@ -186,7 +189,7 @@ export default defineComponent({
     const monthDays = computed(() => {
       type DayObject = {
         day: number | string
-        displayDay?: string | number // Fix: Added missing property
+        displayDay?: string | number
         weekDay: string
         date: Date
       }
@@ -343,22 +346,17 @@ export default defineComponent({
       return hours
     })
 
-    const dayCellWidth = ref(0)
-    const dayCellHeight = ref(0)
+    // DEFAULT WIDTH (Used if CSS var not found)
+    const dayCellWidth = ref(56) 
+    
+    const dayCellHeight = ref(50) 
     const zoomAmount = ref(1)
     const minZoomAmount = ref(1)
     const maxZoomAmount = ref(config.value.maxZoom)
 
     const calendarBodyWidth = computed(() => {
-      if (calendar.value) {
-        const style = getComputedStyle(calendar.value)
-        const dayContainerWidth = parseInt(
-          style.getPropertyValue('--dc-day-container-width').trim(),
-          10
-        )
-        return `${monthDays.value.length * dayContainerWidth}px`
-      }
-      return '0px'
+        // STRICT width calculation
+      return `${monthDays.value.length * dayCellWidth.value}px`
     })
 
     const calendarBodyHeight = computed(() => {
@@ -377,7 +375,6 @@ export default defineComponent({
     const handleZoomStart = (event: MouseEvent | TouchEvent) => {
       if (!config.value.zoom) return
       isZooming.value = true
-      // Fix: Null check for touches
       startY = 'touches' in event ? (event.touches[0]?.clientY || 0) : event.clientY
 
       const targetElement = event.currentTarget as HTMLElement
@@ -406,7 +403,6 @@ export default defineComponent({
       }
 
       animationFrameId = requestAnimationFrame(() => {
-        // Fix: Null check for touches
         const currentY = 'touches' in event ? (event.touches[0]?.clientY || 0) : event.clientY
         const deltaY = currentY - startY
 
@@ -443,23 +439,29 @@ export default defineComponent({
     onMounted(() => {
       if (calendar.value && contentContainer.value) {
         const style = getComputedStyle(calendar.value)
-        const widthStr = style.getPropertyValue('--dc-day-cell-width').trim()
+        const widthStr = style.getPropertyValue('--dc-day-container-width').trim()
         const heightStr = style.getPropertyValue('--dc-day-cell-height').trim()
 
-        if (widthStr) {
-          dayCellWidth.value = parseInt(widthStr, 10)
+        // Safely parse CSS Variable. If invalid, keep default (56).
+        if (widthStr && widthStr.includes('px')) {
+          const parsed = parseInt(widthStr, 10)
+          if (!isNaN(parsed) && parsed > 0) {
+            dayCellWidth.value = parsed
+          }
         }
+        
         if (heightStr) {
-          dayCellHeight.value = parseInt(heightStr, 10)
+          const parsedHeight = parseInt(heightStr, 10)
+           if (!isNaN(parsedHeight) && parsedHeight > 0) {
+            dayCellHeight.value = parsedHeight
+           }
         }
-
+        
+        // Initial Zoom Logic
         const containerWidth = contentContainer.value.clientWidth
         const naturalGridWidth = monthDays.value.length * dayCellWidth.value
         let requiredZoomX = 1
-        if (naturalGridWidth > 0 && containerWidth > naturalGridWidth) {
-          requiredZoomX = containerWidth / naturalGridWidth
-        }
-
+        
         const containerHeight = contentContainer.value.clientHeight
         const naturalGridHeight = dayHoursList.value.length * dayCellHeight.value
         let requiredZoomY = 1
@@ -481,11 +483,12 @@ export default defineComponent({
     })
 
     const processedItems = computed(() => {
-      const dayWidthPercent = 100 / monthDays.value.length
+      // STRICT Layout: Use dayCellWidth value (pixels) for positioning
       const totalHours = config.value.endHour - config.value.startHour
-
-      const contentHeight =
-        dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
+      const contentHeight = dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
+      
+      // Calculate total grid width based on current cell width
+      const totalGridWidth = monthDays.value.length * dayCellWidth.value
 
       return props.modelValue
         .map((item, index) => {
@@ -526,24 +529,23 @@ export default defineComponent({
 
           const topOffset = (itemStartOffset / (totalHours * 60)) * contentHeight
           const height = (itemDuration / (totalHours * 60)) * contentHeight
+          
+          // Pixel-perfect width calculation
+          const widthPx = daySpan * dayCellWidth.value
+          const widthPercent = (widthPx / totalGridWidth) * 100
 
-          const width = daySpan * dayWidthPercent
-
-          // RTL Logic: use 'right' positioning if enabled
           const positionStyle = config.value.dir === 'rtl'
-            ? { right: `${startDayIndex * dayWidthPercent}%`, left: 'auto' }
-            : { left: `${startDayIndex * dayWidthPercent}%`, right: 'auto' }
+            ? { right: `${startDayIndex * dayCellWidth.value}px`, left: 'auto' }
+            : { left: `${startDayIndex * dayCellWidth.value}px`, right: 'auto' }
 
-          // Calculate total duration for z-index (shorter items on top)
           const totalDurationMinutes = endDt.diff(startDt, 'minutes').minutes
-          // Use a large base number so shorter durations result in higher z-index
           const zIndex = Math.max(1, 100000 - Math.floor(totalDurationMinutes))
 
           const style = {
             top: `calc(${topPadding.value}px + ${topOffset}px)`,
             ...positionStyle,
             height: `${height}px`,
-            width: `${width}%`,
+            width: `${widthPx}px`, // Force Pixel Width
             position: 'absolute',
             zIndex
           }
@@ -554,7 +556,8 @@ export default defineComponent({
             style,
             startDayIndex,
             daySpan,
-            itemDuration
+            itemDuration,
+            originalIndex: index
           }
         })
         .filter((item) => item !== null)
@@ -591,14 +594,11 @@ export default defineComponent({
     const handleResizeStart = (event: MouseEvent | TouchEvent, item: any, handle: 'top' | 'bottom') => {
       if (!config.value.editable) return
 
-      const originalIndex = props.modelValue.findIndex(
-        (i) => i.start.getTime() === item.start.getTime() && i.end.getTime() === item.end.getTime()
-      )
+      const originalIndex = item.originalIndex
 
-      if (originalIndex === -1) return
+      if (originalIndex === undefined || originalIndex === -1) return
 
       resizingItem.value = { item, handle, originalIndex }
-      // Fix: Null check
       initialY.value = 'touches' in event ? (event.touches[0]?.clientY || 0) : event.clientY
       initialStart.value = new Date(item.start)
       initialEnd.value = new Date(item.end)
@@ -616,7 +616,6 @@ export default defineComponent({
       if (!resizingItem.value || !calendarContent.value || !config.value.editable) return
       event.preventDefault()
 
-      // Fix: Null check
       const clientY = 'touches' in event ? (event.touches[0]?.clientY || 0) : event.clientY
       const deltaY = clientY - initialY.value
       const calendarRect = calendarContent.value.getBoundingClientRect()
@@ -639,7 +638,6 @@ export default defineComponent({
       }))
 
       const itemToUpdate = newItems[originalIndex]
-      // Fix: Undefined guard
       if (!itemToUpdate) return
 
       const minDurationMs = config.value.minTime * 60000
@@ -681,9 +679,7 @@ export default defineComponent({
     const dragGhost = ref<HTMLElement | null>(null)
     const selectedIndex = ref(-1)
 
-    // Helper to determine if an item should have max Z-Index
     const isItemActive = (index: number) => {
-      // Higher Z-Index if selected, dragging, or resizing
       return selectedItemIndex.value === index ||
         draggingItem.value?.originalIndex === index ||
         resizingItem.value?.originalIndex === index;
@@ -710,7 +706,6 @@ export default defineComponent({
       if (!draggingItem.value || !dragGhost.value || !calendarContent.value) return
       event.preventDefault()
 
-      // Fix: Null check
       const clientX = 'touches' in event ? (event.touches[0]?.clientX || 0) : event.clientX
       const clientY = 'touches' in event ? (event.touches[0]?.clientY || 0) : event.clientY
 
@@ -719,8 +714,6 @@ export default defineComponent({
 
       if (!calendarRect || !contentContainerRect) return
 
-      // Robust index detection for both RTL and LTR using header cells
-      // This avoids inconsistencies with scrollLeft behavior in RTL across browsers
       if (calendarHeader.value && calendarHeader.value.children) {
         const headerChildren = Array.from(calendarHeader.value.children) as HTMLElement[]
         let foundIndex = -1
@@ -809,15 +802,18 @@ export default defineComponent({
       if (!config.value.editable) return
       event.preventDefault()
 
+      // Selection Check: Must click once to select before dragging
       if (selectedItemIndex.value !== index) {
         selectedItemIndex.value = index
         return
       }
 
-      const originalItem = props.modelValue[index]
-      draggingItem.value = { item: originalItem, originalIndex: index }
+      const trueIndex = item.originalIndex
+      const originalItem = props.modelValue[trueIndex]
+
+      draggingItem.value = { item: originalItem, originalIndex: trueIndex }
+      
       draggedElement.value = event.currentTarget as HTMLElement
-      // Fix: Null check
       const clientX = 'touches' in event ? (event.touches[0]?.clientX || 0) : event.clientX
       const clientY = 'touches' in event ? (event.touches[0]?.clientY || 0) : event.clientY
       dragStartX.value = clientX
@@ -830,7 +826,6 @@ export default defineComponent({
       ghost.style.position = 'fixed'
       ghost.style.pointerEvents = 'none'
       ghost.style.opacity = '0.7'
-      // Set a very high Z-Index for the ghost to ensure it stays on top of static items
       ghost.style.zIndex = '1000000'
       ghost.style.boxShadow = '0 5px 15px rgba(0,0,0,0.3)'
       ghost.style.width = `${rect.width}px`
@@ -864,7 +859,6 @@ export default defineComponent({
       document.removeEventListener('touchmove', handleDragMove)
       document.removeEventListener('touchend', handleDragEnd)
 
-      // Fix: Null check
       const clientX = 'changedTouches' in event ? (event.changedTouches[0]?.clientX || 0) : event.clientX
       const clientY = 'changedTouches' in event ? (event.changedTouches[0]?.clientY || 0) : event.clientY
 
@@ -901,8 +895,10 @@ export default defineComponent({
         const calendarRect = calendarContent.value.getBoundingClientRect()
         const dropY = clientY - calendarRect.top + calendarContent.value.scrollTop
         const adjustedDropY = dropY - topPadding.value
+        
         const pixelsPerMinute = contentHeight / (totalHours * 60)
         const offsetMinutes = adjustedDropY / pixelsPerMinute
+        
         const clampedMinutes = Math.max(0, Math.min(offsetMinutes, totalHours * 60))
         const adjustedHourOffset = Math.floor(clampedMinutes / 60)
         const adjustedMinuteOffset = Math.round(clampedMinutes % 60)
@@ -937,20 +933,8 @@ export default defineComponent({
         const newStart = newStartDt.toJSDate()
         const newEnd = new Date(newStart.getTime() + originalDurationMs)
 
-        const startOfDay = new Date(originalItem.start)
-        startOfDay.setHours(0, 0, 0, 0)
-        const endOfDay = new Date(originalItem.end)
-        endOfDay.setHours(0, 0, 0, 0)
-
-        const timeOnlyDurationMs =
-          originalItem.end.getTime() -
-          endOfDay.getTime() -
-          (originalItem.start.getTime() - startOfDay.getTime())
-
-        const halfDurationMs = timeOnlyDurationMs / 2
-
-        const adjustedStart = new Date(newStart.getTime() - halfDurationMs)
-        const adjustedEnd = new Date(newEnd.getTime() - halfDurationMs)
+        const adjustedStart = new Date(newStart.getTime() - (originalDurationMs / 2))
+        const adjustedEnd = new Date(adjustedStart.getTime() + originalDurationMs)
 
         const originalIndex = draggingItem.value.originalIndex
 
@@ -973,12 +957,10 @@ export default defineComponent({
 
           const dayStartOf = startDt.startOf('day').plus({ hours: config.value.startHour })
           const itemStartOffsetMin = startDt.diff(dayStartOf, 'minutes').minutes
-
           const topOffsetPx = (itemStartOffsetMin / (totalHours * 60)) * contentHeight
 
           const tempEndDt = endDt.set({ year: startDt.year, month: startDt.month, day: startDt.day })
           const durationMin = tempEndDt.diff(startDt, 'minutes').minutes
-
           const heightPx = (durationMin / (totalHours * 60)) * contentHeight
 
           let daySpan = 1
@@ -987,34 +969,25 @@ export default defineComponent({
             daySpan = Math.floor(diff) + 1
           }
 
-          // Robust SNAP animation target calculation using Header Cells
           const headerChildren = Array.from(calendarHeader.value.children) as HTMLElement[]
 
           let targetLeft = 0
           let targetWidth = 0
 
           if (config.value.dir === 'rtl') {
-            // In RTL, items grow leftwards from the start index.
-            // If span > 1, the item spans from targetDayIndex to targetDayIndex + daySpan - 1.
-            // The "Left" edge of the item is the Left edge of the column at (targetDayIndex + daySpan - 1).
             const rightMostIndex = targetDayIndex
             const leftMostIndex = Math.min(headerChildren.length - 1, targetDayIndex + daySpan - 1)
-
             const rightCellRect = headerChildren[rightMostIndex]?.getBoundingClientRect()
             const leftCellRect = headerChildren[leftMostIndex]?.getBoundingClientRect()
-
             if (leftCellRect && rightCellRect) {
               targetLeft = leftCellRect.left
               targetWidth = rightCellRect.right - leftCellRect.left
             }
           } else {
-            // LTR Logic
             const leftMostIndex = targetDayIndex
             const rightMostIndex = Math.min(headerChildren.length - 1, targetDayIndex + daySpan - 1)
-
             const leftCellRect = headerChildren[leftMostIndex]?.getBoundingClientRect()
             const rightCellRect = headerChildren[rightMostIndex]?.getBoundingClientRect()
-
             if (leftCellRect && rightCellRect) {
               targetLeft = leftCellRect.left
               targetWidth = rightCellRect.right - leftCellRect.left
@@ -1023,7 +996,7 @@ export default defineComponent({
 
           targetRect = {
             top: containerRect.top + topPadding.value + topOffsetPx - calendarContent.value.scrollTop,
-            left: targetLeft, // This is already relative to viewport because getBoundingClientRect is
+            left: targetLeft,
             width: targetWidth,
             height: heightPx
           }
@@ -1117,42 +1090,37 @@ export default defineComponent({
     } | null>(null)
     const initialX = ref(0)
 
-    const handleHorizontalResizeStart = (
-      event: MouseEvent | TouchEvent,
-      item: any,
-      handle: 'left' | 'right'
-    ) => {
-      if (!config.value.editable) return
+const handleHorizontalResizeStart = (
+  event: MouseEvent | TouchEvent,
+  item: any,
+  handle: 'left' | 'right'
+) => {
+  if (!config.value.editable) return
 
-      const originalIndex = props.modelValue.findIndex(
-        (i) => i.start.getTime() === item.start.getTime() && i.end.getTime() === item.end.getTime()
-      )
+  const originalIndex = item.originalIndex
 
-      if (originalIndex === -1) return
+  if (originalIndex === undefined || originalIndex === -1) return
 
-      horizontalResizingItem.value = { item, handle, originalIndex }
-      // Fix: Null check
-      initialX.value = 'touches' in event ? (event.touches[0]?.clientX || 0) : event.clientX
-      initialStart.value = new Date(item.start)
-      initialEnd.value = new Date(item.end)
+  horizontalResizingItem.value = { item, handle, originalIndex }
+  initialX.value = 'touches' in event ? (event.touches[0]?.clientX || 0) : event.clientX
+  initialStart.value = new Date(item.start)
+  initialEnd.value = new Date(item.end)
 
-      const allItems = document.querySelectorAll('.calendar-item-wrapper')
-      allItems.forEach((el) => el.classList.add('no-transition'))
+  const allItems = document.querySelectorAll('.calendar-item-wrapper')
+  allItems.forEach((el) => el.classList.add('no-transition'))
 
-      document.addEventListener('mousemove', handleHorizontalResizing)
-      document.addEventListener('mouseup', handleHorizontalResizeEnd)
-      document.addEventListener('touchmove', handleHorizontalResizing)
-      document.addEventListener('touchend', handleHorizontalResizeEnd)
-    }
+  document.addEventListener('mousemove', handleHorizontalResizing)
+  document.addEventListener('mouseup', handleHorizontalResizeEnd)
+  document.addEventListener('touchmove', handleHorizontalResizing)
+  document.addEventListener('touchend', handleHorizontalResizeEnd)
+}
 
     const handleHorizontalResizing = (event: MouseEvent | TouchEvent) => {
       if (!horizontalResizingItem.value || !calendarContent.value || !config.value.editable) return
-      // Fix: Null check
       const clientX = 'touches' in event ? (event.touches[0]?.clientX || 0) : event.clientX
       const deltaX = clientX - initialX.value
       const dayWidthPixels = calendarContent.value.scrollWidth / monthDays.value.length
 
-      // In RTL, dragging LEFT (negative delta) means adding time, dragging RIGHT means removing time
       const directionMultiplier = config.value.dir === 'rtl' ? -1 : 1
       const deltaDays = Math.round(deltaX / dayWidthPixels) * directionMultiplier
 
@@ -1167,7 +1135,6 @@ export default defineComponent({
       }))
 
       const itemToUpdate = newItems[originalIndex]
-      // Fix: Undefined guard
       if (!itemToUpdate) return
 
       const originalStart = DateTime.fromJSDate(initialStart.value)
@@ -1203,7 +1170,6 @@ export default defineComponent({
       document.removeEventListener('touchend', handleHorizontalResizeEnd)
     }
 
-    // Fix: Helper function to cast styles
     const getItemStyle = (item: any, index: number): StyleValue => {
       const baseStyle = item.style || {};
       return {
@@ -1247,7 +1213,8 @@ export default defineComponent({
       handleHorizontalResizeEnd,
       deselectItems,
       isItemActive,
-      getItemStyle
+      getItemStyle,
+      dayCellWidth // Exported for template binding
     }
   },
 })
@@ -1288,6 +1255,7 @@ export default defineComponent({
   overflow-x: auto;
   user-select: none;
   flex: 1;
+  /* Masking for fading effect on edges if desired */
   -webkit-mask-image: linear-gradient(to right,
       transparent 0,
       black 10px,
@@ -1306,8 +1274,10 @@ export default defineComponent({
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0.5rem;
-  min-width: var(--dc-day-container-width);
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  /* padding: 0.5rem; */
+  /* Removed min-width here to rely on inline styles */
   flex-shrink: 0;
 }
 
@@ -1329,7 +1299,7 @@ export default defineComponent({
 }
 
 .current-day {
-  color: var(--dc-current-day-color); /* Fix: Added missing dash */
+  color: var(--dc-current-day-color);
 }
 
 
@@ -1344,7 +1314,7 @@ export default defineComponent({
 .hours-column {
   flex-shrink: 0;
   height: calc(100% - 50px);
-  min-width: var(--dc-day-container-width);
+  /* Width handled inline now */
   z-index: 10;
   bottom: 0px;
   background-color: var(--dc-bg);
@@ -1353,7 +1323,6 @@ export default defineComponent({
   user-select: none;
   align-items: center;
   justify-content: space-around;
-  width: var(--dc-day-container-width);
 }
 
 [dir='ltr'] .hours-column {
@@ -1451,7 +1420,7 @@ export default defineComponent({
 }
 
 .header-padding {
-  width: var(--dc-day-container-width);
+  /* Width handled inline now */
   flex-shrink: 0;
   height: 100%;
 }

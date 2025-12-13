@@ -18,7 +18,7 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
-  build: {
+ build: {
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
       name: 'DopeCalendar',
@@ -31,7 +31,9 @@ export default defineConfig({
           vue: 'Vue',
         },
         assetFileNames: (assetInfo) => {
-          if (assetInfo.name === 'style.css') return 'calendar.css';
+          if (assetInfo.name && assetInfo.name.endsWith('.css')) {
+            return 'calendar.css';
+          }
           return assetInfo.name as string;
         },
       },

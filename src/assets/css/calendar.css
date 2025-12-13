@@ -20,14 +20,22 @@
   --dc-hour-text-color: rgba(0, 0, 0, 0.5);
   --dc-weekend-day-color: rgba(248, 113, 113, 0.5);
   --dc-current-day-color: rgba(0, 36, 199, 1);
+  --dc-selected-shadow-color: rgba(54, 162, 235, 0.5);
+  --dc-selected-outline-color: rgba(54, 162, 235, 0.8);
+  
+  /* You can even make the width/offset variables if you want extreme customization */
+  --dc-selected-shadow: 0 0 0 3px var(--dc-selected-shadow-color), 0 4px 12px rgba(0, 0, 0, 0.15);
+  --dc-selected-outline: 2px solid var(--dc-selected-outline-color);
+  --dc-selected-offset: 2px;
 }
 
 .selected {
-  box-shadow:
-    0 0 0 3px rgba(54, 162, 235, 0.5),
-    0 4px 12px rgba(0, 0, 0, 0.15);
-  outline: 2px solid rgba(54, 162, 235, 0.8);
-  outline-offset: 2px;
+  box-shadow: var(--dc-selected-shadow);
+  outline: var(--dc-selected-outline);
+  outline-offset: var(--dc-selected-offset);
+  
+  /* Optional: Add a transition for smoother effect */
+  transition: all 0.2s ease; 
 }
 
 /* --- Date Picker Variables --- */
