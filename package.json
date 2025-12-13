@@ -1,6 +1,6 @@
 {
   "name": "dope-calendar",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "author": "Amir S. <amirsafaricg1380@gmail.com>",
   "contributors": [
     "Vahid V. <vhid.vz@gmail.com>"
@@ -12,14 +12,14 @@
   "main": "./dist/dope-calendar.umd.cjs",
   "module": "./dist/dope-calendar.js",
   "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/dope-calendar.js",
-      "require": "./dist/dope-calendar.umd.cjs"
-    },
-    "./calendar.css": "./dist/calendar.css"
+"exports": {
+  ".": {
+    "types": "./dist/index.d.ts",
+    "import": "./dist/dope-calendar.js",
+    "require": "./dist/dope-calendar.umd.cjs"
   },
+  "./calendar.css": "./dist/calendar.css"
+},
   "license": "Apache-2.0",
   "scripts": {
     "dev": "vite",
