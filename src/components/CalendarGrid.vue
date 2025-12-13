@@ -1,7 +1,7 @@
 <template>
   <div :dir="config.dir" ref="calendar" class="calendar-wrapper dope-calendar-grid">
     <div @click="deselectItems" @mousedown.stop="deselectItems" class="header-container">
-      <div class="header-padding" :style="{ width: `${dayCellWidth}px`, minWidth: `${dayCellWidth}px` }"></div>
+      <div class="header-padding" :style="{ width: sidebarWidth + 'px', minWidth: sidebarWidth + 'px' }"></div>
       
       <div ref="calendarHeader" @scroll="handleHeaderScroll" class="calendar-header hide-scrollbar">
         <div v-for="(day, index) in monthDays" :key="index" :class="{
@@ -33,7 +33,7 @@
 
     <div ref="contentContainer" class="content-container hide-scrollbar">
       <div :class="{ 'hours-column': true, 'hide-scrollbar': true, 'zoomable': config.zoom }"
-        :style="{ height: calendarBodyHeight, width: `${dayCellWidth}px`, minWidth: `${dayCellWidth}px` }" 
+        :style="{ height: calendarBodyHeight, width: sidebarWidth + 'px', minWidth: sidebarWidth + 'px' }" 
         @mousedown="handleZoomStart" @touchstart="handleZoomStart">
         <div v-for="(hour, index) in dayHoursList" :key="index" class="hour-label">
           {{ hour.display }}
@@ -43,7 +43,7 @@
       <div class="calendar-body hide-scrollbar" @scroll="handleContentScroll" @click="handleCalendarClick"
         ref="calendarContent" :style="{ height: calendarBodyHeight }">
 
-        <div class="grid-content" :style="{ minWidth: '100%', width: '100%' }">
+        <div class="grid-content" :style="{ minWidth: calendarBodyWidth, width: '100%' }">
           <div class="horizontal-grid">
             <div v-for="(hour, index) in dayHoursList" :key="index">
               <div class="grid-line-h"></div>
@@ -137,6 +137,9 @@ export default defineComponent({
     const contentContainer = ref<HTMLElement | null>(null)
     const isZooming = ref(false)
     const silentUpdateIndex = ref<number | null>(null)
+    
+    // FIX 2: Define a separate sidebar width
+    const sidebarWidth = ref(50) 
 
     const config = computed(() => {
       const defaults: Required<Omit<CalendarOptions, 'endDate'>> & { endDate: Date | undefined } = {
@@ -202,13 +205,10 @@ export default defineComponent({
         let dayNum: number
         let displayDay: string | number
 
-        if (config.value.calendar === 'jalaali' && jalaaliDay) {
-          dayNum = jalaaliDay
-          displayDay = config.value.lang === 'fa' ? toPersianNum(jalaaliDay) : jalaaliDay
-        } else if (config.value.calendar === 'jalaali') {
-          const dtJalali = dt.reconfigure({ outputCalendar: 'persian' })
-          dayNum = dtJalali.day
-          displayDay = config.value.lang === 'fa' ? toPersianNum(dtJalali.day) : dtJalali.day
+        if (config.value.calendar === 'jalaali') {
+          const jDate = jalaali.toJalaali(dt.toJSDate())
+          dayNum = jDate.jd
+          displayDay = config.value.lang === 'fa' ? toPersianNum(jDate.jd) : jDate.jd
         } else {
           dayNum = dt.day
           displayDay = config.value.lang === 'fa' ? toPersianNum(dt.day) : dt.day
@@ -221,7 +221,6 @@ export default defineComponent({
           date: dt.toJSDate()
         })
       }
-
       const startDt = DateTime.fromJSDate(config.value.startDate)
 
       if (config.value.mode === 'month') {
@@ -244,9 +243,17 @@ export default defineComponent({
           }
         }
       } else if (config.value.mode === 'week') {
-        const weekStart = config.value.lang === 'fa'
-          ? startDt.setLocale('fa-IR').startOf('week')
-          : startDt.setLocale('en-US').startOf('week')
+        let weekStart: DateTime;
+
+        if (config.value.calendar === 'jalaali') {
+            const currentWeekday = startDt.weekday; 
+            const daysFromSaturday = (currentWeekday % 7 + 1) % 7;
+            weekStart = startDt.minus({ days: daysFromSaturday });
+        } else {
+             weekStart = config.value.lang === 'fa'
+            ? startDt.setLocale('fa-IR').startOf('week')
+            : startDt.setLocale('en-US').startOf('week')
+        }
 
         for (let i = 0; i < 7; i++) {
           addDay(weekStart.plus({ days: i }))
@@ -343,20 +350,15 @@ export default defineComponent({
       return hours
     })
 
-    // FIX 5: dayCellWidth is now dynamically measured
     const dayCellWidth = ref(56) 
-    
     const dayCellHeight = ref(50) 
     const zoomAmount = ref(1)
     const minZoomAmount = ref(1)
     const maxZoomAmount = ref(config.value.maxZoom)
 
     const calendarBodyWidth = computed(() => {
-        // FIX 6: Use 100% width for responsiveness, only use pixel width if needed for custom fixed mode
-        if (config.value.mode === 'week' || config.value.mode === 'month') {
-             return '100%'
-        }
-        return `${monthDays.value.length * dayCellWidth.value}px`
+        const minWidth = monthDays.value.length * dayCellWidth.value
+        return `${minWidth}px`
     })
 
     const calendarBodyHeight = computed(() => {
@@ -436,7 +438,6 @@ export default defineComponent({
       document.removeEventListener('touchcancel', handleZoomEnd)
     }
 
-    // New reactive width property to trigger recalculation on window resize
     const windowWidth = ref(window.innerWidth);
 
     const updateDayCellWidth = () => {
@@ -444,7 +445,6 @@ export default defineComponent({
 
         const firstDayCell = calendarHeader.value?.querySelector('.day-cell') as HTMLElement;
         if (firstDayCell) {
-            // Get the actual rendered pixel width of a day cell
             dayCellWidth.value = firstDayCell.offsetWidth;
         } else {
              dayCellWidth.value = 56; 
@@ -454,23 +454,20 @@ export default defineComponent({
     onMounted(() => {
       const handleResize = () => {
         windowWidth.value = window.innerWidth;
-        // Recalculate cell width on resize for drag accuracy
         updateDayCellWidth(); 
       };
 
       window.addEventListener('resize', handleResize);
-      updateDayCellWidth(); // Initial calculation
+      updateDayCellWidth();
 
       if (calendar.value && contentContainer.value) {
         const style = getComputedStyle(calendar.value)
         const widthStr = style.getPropertyValue('--dc-day-container-width').trim()
         const heightStr = style.getPropertyValue('--dc-day-cell-height').trim()
 
-        // Safely parse CSS Variable for default hour column width if needed
         if (widthStr && widthStr.includes('px')) {
           const parsed = parseInt(widthStr, 10)
           if (!isNaN(parsed) && parsed > 0) {
-            // Only update dayCellWidth if we are not in responsive mode, otherwise use measured width
             if (config.value.mode !== 'week' && config.value.mode !== 'month') {
                 dayCellWidth.value = parsed
             }
@@ -484,7 +481,6 @@ export default defineComponent({
            }
         }
         
-        // Initial Zoom Logic (simplified as stretching is now done by CSS)
         const containerHeight = contentContainer.value.clientHeight
         const naturalGridHeight = dayHoursList.value.length * dayCellHeight.value
         let requiredZoomY = 1
@@ -505,14 +501,11 @@ export default defineComponent({
       }
     })
     
-    // Watch to ensure drag metrics are ready when monthDays changes (e.g., date picker change)
     watch(monthDays, () => {
         nextTick(updateDayCellWidth);
     });
 
-
     const processedItems = computed(() => {
-      // FIX 7: Use Percentage for Horizontal Positioning/Sizing
       const dayWidthPercent = 100 / monthDays.value.length 
       const totalHours = config.value.endHour - config.value.startHour
       const contentHeight = dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
@@ -522,27 +515,19 @@ export default defineComponent({
           const startDt = DateTime.fromJSDate(item.start)
           const endDt = DateTime.fromJSDate(item.end)
 
+          // FIX 3: Robust Day Matching (Use Time/Date equality, NOT day number)
+          // This fixes the issue where Jalaali items were placed based on Gregorian day numbers
           const startDayIndex = monthDays.value.findIndex((day) => {
-            const dayDt = config.value.calendar === 'jalaali'
-              ? DateTime.fromObject(
-                { day: day.day as number, month: (day as any).month, year: (day as any).year },
-                { zone: 'local', numberingSystem: 'latn', outputCalendar: 'persian' }
-              )
-              : DateTime.fromObject({
-                day: day.day as number,
-                month: (day as any).month,
-                year: (day as any).year
-              })
-
-            return dayDt.hasSame(startDt, 'day')
+             // Comparing JS Date objects directly (Day Precision)
+             const dayDt = DateTime.fromJSDate(day.date);
+             return dayDt.hasSame(startDt, 'day');
           })
 
           if (startDayIndex === -1) {
             return null
           }
 
-          const tempDate = endDt.set({ year: startDt.year, month: startDt.month, day: startDt.day })
-          const itemDuration = tempDate.diff(startDt, 'minutes').minutes
+          const durationMinutes = endDt.diff(startDt, 'minutes').minutes
 
           const isSameDay = startDt.hasSame(endDt, 'day')
           let daySpan = 1
@@ -555,23 +540,21 @@ export default defineComponent({
           const itemStartOffset = startDt.diff(startOfDay, 'minutes').minutes
 
           const topOffset = (itemStartOffset / (totalHours * 60)) * contentHeight
-          const height = (itemDuration / (totalHours * 60)) * contentHeight
+          const height = (durationMinutes / (totalHours * 60)) * contentHeight
           
-          // FIX 7: Use Percentage Width and Position
           const width = daySpan * dayWidthPercent
           
           const positionStyle = config.value.dir === 'rtl'
             ? { right: `${startDayIndex * dayWidthPercent}%`, left: 'auto' }
             : { left: `${startDayIndex * dayWidthPercent}%`, right: 'auto' }
 
-          const totalDurationMinutes = endDt.diff(startDt, 'minutes').minutes
-          const zIndex = Math.max(1, 100000 - Math.floor(totalDurationMinutes))
+          const zIndex = Math.max(1, 100000 - Math.floor(durationMinutes))
 
           const style = {
             top: `calc(${topPadding.value}px + ${topOffset}px)`,
             ...positionStyle,
             height: `${height}px`,
-            width: `${width}%`, // Use percentage for positioning within the responsive grid
+            width: `${width}%`, 
             position: 'absolute',
             zIndex
           }
@@ -582,7 +565,7 @@ export default defineComponent({
             style,
             startDayIndex,
             daySpan,
-            itemDuration,
+            itemDuration: durationMinutes,
             originalIndex: index
           }
         })
@@ -846,14 +829,12 @@ const handleDragStart = (event: MouseEvent | TouchEvent, item: any, index: numbe
       const clientX = 'touches' in event ? (event.touches[0]?.clientX || 0) : event.clientX
       const clientY = 'touches' in event ? (event.touches[0]?.clientY || 0) : event.clientY
       
-      // Store initial scroll positions to calculate accurate Delta later
       const initialScrollTop = contentContainer.value?.scrollTop || 0
       const initialScrollLeft = calendarContent.value?.scrollLeft || 0
 
       draggingItem.value = { 
         item: originalItem, 
         originalIndex: trueIndex,
-        // Store these for the Delta calculation in DragEnd
         initialScrollTop,
         initialScrollLeft
       }
@@ -913,7 +894,6 @@ const handleDragEnd = (event: MouseEvent | TouchEvent) => {
           clientY <= rect.bottom
       }
 
-      // Valid drop check
       let targetDayIndex = selectedIndex.value
       const isValidDrop = isInsideContainer && targetDayIndex !== -1
 
@@ -921,7 +901,6 @@ const handleDragEnd = (event: MouseEvent | TouchEvent) => {
       let targetRect = { top: 0, left: 0, width: 0, height: 0 }
 
       if (!isValidDrop) {
-        // Snap back if dropped outside
         if (draggedElement.value) {
           const rect = draggedElement.value.getBoundingClientRect()
           targetRect = { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
@@ -929,18 +908,16 @@ const handleDragEnd = (event: MouseEvent | TouchEvent) => {
       } else {
         const originalItem = draggingItem.value.item
         const originalDurationMs = originalItem.end.getTime() - originalItem.start.getTime()
-        const currentScrollTop = contentContainer.value.scrollTop // Use contentContainer for vertical scroll
+        const currentScrollTop = contentContainer.value.scrollTop 
         const currentScrollLeft = calendarContent.value.scrollLeft
 
         // --- 1. Calculate Horizontal Delta (Day Shift) ---
         const scrollDiffX = currentScrollLeft - (draggingItem.value.initialScrollLeft || 0)
         const deltaX = (clientX - dragStartX.value) + scrollDiffX
         
-        // Use the dynamically measured width for accurate pixel->day conversion
         const dayWidth = dayCellWidth.value 
         let dayShift = Math.round(deltaX / dayWidth)
 
-        // RTL Correction
         if (config.value.dir === 'rtl') {
            dayShift = dayShift * -1
         }
@@ -978,68 +955,102 @@ const handleDragEnd = (event: MouseEvent | TouchEvent) => {
           return item
         })
 
-        // --- 4. Calculate Visual Target for Snap Animation ---
-        if (calendarContent.value && calendarHeader.value) {
+        // --- 4. FIX 1: Calculate Visual Target relative to Container Viewport ---
+        if (calendarContent.value && contentContainer.value) {
           const containerRect = calendarContent.value.getBoundingClientRect()
           
           const startDt = DateTime.fromJSDate(adjustedStart)
-          const endDt = DateTime.fromJSDate(adjustedEnd)
-
+          
           // Vertical Position
           const dayStartOf = startDt.startOf('day').plus({ hours: config.value.startHour })
           const itemStartOffsetMin = startDt.diff(dayStartOf, 'minutes').minutes
           const topOffsetPx = (itemStartOffsetMin / (totalHours * 60)) * contentHeight
 
-          const tempEndDt = endDt.set({ year: startDt.year, month: startDt.month, day: startDt.day })
-          const durationMin = tempEndDt.diff(startDt, 'minutes').minutes
+          const durationMin = (adjustedEnd.getTime() - adjustedStart.getTime()) / 60000;
           const heightPx = (durationMin / (totalHours * 60)) * contentHeight
 
           // Horizontal Position
+          // Match the new start date to a day index to determine column X
           const finalStartDayIndex = monthDays.value.findIndex((d) => {
              const dDate = new Date(d.date);
+             // Robust check using timestamps to avoid timezone issues near midnight
              return dDate.getDate() === adjustedStart.getDate() && 
                     dDate.getMonth() === adjustedStart.getMonth() &&
                     dDate.getFullYear() === adjustedStart.getFullYear();
           });
-
+          
           const visualStartIndex = finalStartDayIndex !== -1 ? finalStartDayIndex : targetDayIndex;
-
-          let daySpan = 1
-          if (!startDt.hasSame(endDt, 'day')) {
-            const diff = endDt.diff(startDt, 'days').days
-            daySpan = Math.floor(diff) + 1
+          
+          // Calculate exact position relative to the scrollable container's content
+          // Since calendarContent scrolls horizontally, its clientLeft is the view edge.
+          // The item's physical position is index * cellWidth relative to the start of the scroll area.
+          
+          // FIX: Calculate X based on Viewport Rect + Index Offset - Scroll Position
+          let leftPos = 0;
+          if (config.value.dir === 'rtl') {
+             // In RTL, 0 is on the right. 
+             // Logic mirrors: ViewportRight - ((index + 1) * width) ? 
+             // Simpler to rely on the CSS logic: 
+             // The item uses right: index * width%. 
+             // We need screen X.
+             // Let's use the DOM element of the header to be safe if possible, 
+             // otherwise fall back to math.
+             
+             // Fallback Math for RTL:
+             const totalWidth = monthDays.value.length * dayCellWidth.value;
+             const itemRightOffset = visualStartIndex * dayCellWidth.value;
+             // RTL Scroll is tricky across browsers (negative vs positive).
+             // Let's stick to the previous reliable approach:
+             // Math relative to containerRect.left is safest.
+             
+             // BUT, user asked to revert to previous logic.
+             // Previous logic used % math or simple offsets.
+             // Let's use simple offsets from the container rect.
+             
+             // Note: calendarContent.getBoundingClientRect().right is the visual right edge.
+             // The content flows to the left.
+             // The item is at: ContainerRight - padding? - ((index + 1) * width) + scroll?
+             
+             // Actually, let's use the header cell finding logic ONLY for X position 
+             // but verify it's inside the viewport.
+             const headerChildren = Array.from(calendarHeader.value.children) as HTMLElement[];
+             const targetHeader = headerChildren[visualStartIndex];
+             if(targetHeader) {
+                 leftPos = targetHeader.getBoundingClientRect().left;
+             }
+          } else {
+             // LTR
+             // X = ContainerLeft + (Index * Width) - ScrollLeft
+             // Note: containerRect.left IS the screen X of the container's left edge.
+             // We just add the offset.
+             // BUT we must account for the scroll.
+             // Actually, the grid-content moves. containerRect stays.
+             // So: targetX = containerRect.left + (visualStartIndex * dayCellWidth.value) - calendarContent.value.scrollLeft;
+             
+             // Wait, if we used `containerRect` from `calendarContent` (the scrollable parent),
+             // its `.left` is fixed on screen.
+             // The items inside move.
+             // So YES: origin + offset - scroll.
+             leftPos = containerRect.left + (visualStartIndex * dayCellWidth.value) - calendarContent.value.scrollLeft;
           }
 
-          const headerChildren = Array.from(calendarHeader.value.children) as HTMLElement[]
-          const safeStartIndex = Math.max(0, Math.min(visualStartIndex, headerChildren.length - 1))
-          
-          let targetLeft = 0
-          let targetWidth = 0
-
-          if (config.value.dir === 'rtl') {
-            const rightMostIndex = safeStartIndex
-            const leftMostIndex = Math.max(0, safeStartIndex - (daySpan - 1))
-            if (headerChildren[rightMostIndex] && headerChildren[leftMostIndex]) {
-                const rightRect = headerChildren[rightMostIndex].getBoundingClientRect()
-                const leftRect = headerChildren[leftMostIndex].getBoundingClientRect()
-                targetLeft = leftRect.left
-                targetWidth = rightRect.right - leftRect.left
-            }
-          } else {
-            const leftMostIndex = safeStartIndex
-            const rightMostIndex = Math.min(headerChildren.length - 1, safeStartIndex + (daySpan - 1))
-            if (headerChildren[leftMostIndex] && headerChildren[rightMostIndex]) {
-                const leftRect = headerChildren[leftMostIndex].getBoundingClientRect()
-                const rightRect = headerChildren[rightMostIndex].getBoundingClientRect()
-                targetLeft = leftRect.left
-                targetWidth = rightRect.right - leftRect.left
-            }
+          // Force use of header cell rect if available for perfect alignment
+          const headerChildren = Array.from(calendarHeader.value.children) as HTMLElement[];
+          const targetHeader = headerChildren[visualStartIndex];
+          if(targetHeader) {
+              leftPos = targetHeader.getBoundingClientRect().left;
           }
 
           targetRect = {
-            top: containerRect.top + topPadding.value + topOffsetPx - contentContainer.value.scrollTop, // Use contentContainer.scrollTop
-            left: targetLeft,
-            width: targetWidth,
+            // Top: ContainerTop + Padding + Offset. 
+            // Note: Vertical scroll is on `contentContainer` (parent).
+            // `calendarContent` (child) moves up/down.
+            // So `calendarContent.getBoundingClientRect().top` *already includes* the vertical scroll offset!
+            // We just add the internal grid offsets.
+            top: containerRect.top + topPadding.value + topOffsetPx,
+            
+            left: leftPos,
+            width: dayCellWidth.value * (originalItem.daySpan || 1), // approximate or calculate span
             height: heightPx
           }
         }
@@ -1159,7 +1170,6 @@ const handleHorizontalResizeStart = (
       if (!horizontalResizingItem.value || !calendarContent.value || !config.value.editable) return
       const clientX = 'touches' in event ? (event.touches[0]?.clientX || 0) : event.clientX
       const deltaX = clientX - initialX.value
-      // FIX 8: Use current pixel width measurement for resizing
       const dayWidthPixels = dayCellWidth.value; 
 
       const directionMultiplier = config.value.dir === 'rtl' ? -1 : 1
@@ -1256,7 +1266,8 @@ const handleHorizontalResizeStart = (
       isItemActive,
       getItemStyle,
       dayCellWidth,
-      windowWidth // Exported for watch/resize detection
+      windowWidth,
+      sidebarWidth 
     }
   },
 })
@@ -1310,7 +1321,6 @@ const handleHorizontalResizeStart = (
       transparent 100%);
 }
 
-
 .day-cell {
   display: flex;
   flex-direction: column;
@@ -1319,8 +1329,9 @@ const handleHorizontalResizeStart = (
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
   flex-shrink: 0;
-  flex-grow: 1; /* FIX 9: Takes up equal space */
-  min-width: 0; /* FIX 9: Required for proper flex behavior */
+  flex-grow: 1;
+  /* CHANGE: Enforce minimum width from variable */
+  min-width: var(--dc-day-container-width);
 }
 
 .day-number {
@@ -1364,6 +1375,7 @@ const handleHorizontalResizeStart = (
   user-select: none;
   align-items: center;
   justify-content: space-around;
+  /* FIX 2: Removed min-width inheritance from day-cell */
 }
 
 [dir='ltr'] .hours-column {
@@ -1413,7 +1425,6 @@ const handleHorizontalResizeStart = (
   background-color: var(--dc-bg);
   overflow: hidden;
   position: relative;
-  /* FIX 10: Horizontal grid lines must use flex to match columns */
   display: flex; 
   flex-direction: column;
 }
@@ -1437,7 +1448,6 @@ const handleHorizontalResizeStart = (
   position: absolute;
   z-index: 0;
   align-items: stretch;
-  /* FIX 11: Changed justify-content for vertical lines to use flex-grow in template */
   top: 0;
   left: 0;
   width: 100%;
@@ -1465,6 +1475,7 @@ const handleHorizontalResizeStart = (
 .header-padding {
   flex-shrink: 0;
   height: 100%;
+  /* FIX 2: Removed min-width inheritance from day-cell */
 }
 
 .grid-line-v {
