@@ -6,11 +6,11 @@
       <div ref="calendarHeader" @scroll="handleHeaderScroll" class="calendar-header hide-scrollbar">
         <div v-for="(day, index) in monthDays" :key="index" :class="{
           'day-cell': true,
-          'weekend-day': isWeekend(day.weekDay) || isHoliday(index),
+          'weekend-day': isWeekend(day.weekDay) || isHoliday(day.date),
           'current-day': isCurrentDay(day.date)
         }">
           <div class="day-number" :style="{
-            color: isHoliday(index) || isWeekend(day.weekDay)
+            color: isHoliday(day.date) || isWeekend(day.weekDay)
               ? 'var(--dc-weekend-day-color)'
               : (isCurrentDay(day.date) ? 'var(--dc-current-day-color)' : 'var(--dc-day-number-color)'),
             fontSize: 'var(--dc-day-number-font-size)',
@@ -19,7 +19,7 @@
             {{ config.lang === 'fa' ? toPersianNum(day.day) : day.day }}
           </div>
           <div class="day-name" :style="{
-            color: isWeekend(day.weekDay) || isHoliday(index)
+            color: isWeekend(day.weekDay) || isHoliday(day.date)
               ? 'var(--dc-weekend-day-color)'
               : (isCurrentDay(day.date) ? 'var(--dc-current-day-color)' : 'var(--dc-day-name-color)'),
             fontSize: 'var(--dc-day-name-font-size)',
@@ -581,52 +581,51 @@ export default defineComponent({
         .filter((item) => item !== null)
     })
 
-  const processedHolidays = computed(() => {
-      const holidaySet = new Set<number>()
-      
-      // Get all Gregorian dates from monthDays (these are always Gregorian internally)
-      const monthDaysSet = new Set(
-        monthDays.value.map(day => 
-          `${day.date.getFullYear()}-${String(day.date.getMonth() + 1).padStart(2, '0')}-${String(day.date.getDate()).padStart(2, '0')}`
-        )
-      )
+const processedHolidays = computed(() => {
+      // Assuming you want to treat strings as Jalaali when in Jalaali mode
+      const isJalaali = config.value.calendar === 'jalaali'
 
-      // Convert each holiday to Gregorian key and find its index in monthDays
-      config.value.holidays.forEach((d: any) => {
-        let gregorianDate: Date
-
-        if (d instanceof Date) {
-          gregorianDate = new Date(d)
-          if (isNaN(gregorianDate.getTime())) return
-        } else {
-          return
+      const keys = config.value.holidays.map((d: any) => {
+        // 1. HANDLE JALAALI STRINGS (e.g., "1404-10-04" or "1404/10/04")
+        if (isJalaali && typeof d === 'string') {
+           // Normalize separators to hyphens
+           const normalized = d.replace(/\//g, '-')
+           
+           // Check if it looks like a date string
+           if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(normalized)) {
+               const parts = normalized.split('-').map((p: string) => parseInt(p, 10))
+               
+               // Convert Jalaali (Year, Month, Day) -> Gregorian
+               // parts[0] = Year, parts[1] = Month, parts[2] = Day
+               const g = jalaali.toGregorian(parts[0], parts[1], parts[2])
+               
+               // Return Key: Year-MonthIndex-Day
+               // Note: g.gm is 1-12, but JS Date Month is 0-11, so we subtract 1
+               return `${g.gy}-${g.gm - 1}-${g.gd}`
+           }
         }
 
-        const key = `${gregorianDate.getFullYear()}-${String(gregorianDate.getMonth() + 1).padStart(2, '0')}-${String(gregorianDate.getDate()).padStart(2, '0')}`
+        // 2. HANDLE STANDARD DATE OBJECTS (e.g. new Date('2025-12-25'))
+        // If the input is already a JS Date object, use it directly.
+        const date = new Date(d)
+        if (isNaN(date.getTime())) return null
         
-        // Find the index of this date in monthDays
-        const index = monthDays.value.findIndex(day => {
-          const dayKey = `${day.date.getFullYear()}-${String(day.date.getMonth() + 1).padStart(2, '0')}-${String(day.date.getDate()).padStart(2, '0')}`
-          return dayKey === key
-        })
-
-        if (index !== -1) {
-          holidaySet.add(index)
-        }
+        return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
       })
 
-      return holidaySet
+      return new Set(keys.filter((k) => k))
     })
 
-    const isHoliday = (index: number) => {
-      return processedHolidays.value.has(index)
+    const isHoliday = (date: Date) => {
+      if (!date) return false
+      // The grid "date" is ALWAYS a valid Gregorian JS Date object (from monthDays)
+      // So we just check if its key exists in our processed set.
+      return processedHolidays.value.has(
+        `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+      )
     }
 
-    onMounted(()=>{
-      nextTick(()=>{
-        console.log('holidays:', processedHolidays.value)
-      })
-    })
+    
 
     const isCurrentDay = (date: Date) => {
       const today = new Date()

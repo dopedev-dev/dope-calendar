@@ -37,8 +37,8 @@ const gridItems = ref([
 ])
 
 const calendarGridOptions = {
-  // calendar: 'jalaali',
-  calendar: 'georgian', 
+  calendar: 'jalaali',
+  // calendar:georgian', 
   mode: 'month',
   editable: true,
   zoom: true,
