@@ -527,7 +527,16 @@ export default defineComponent({
             return null
           }
 
-          const durationMinutes = endDt.diff(startDt, 'minutes').minutes
+          // CHANGED: Calculate Visual Duration based on Time of Day only
+          // This ensures height is based on hours/minutes, not days
+          const startMinutes = startDt.hour * 60 + startDt.minute;
+          const endMinutes = endDt.hour * 60 + endDt.minute;
+          
+          let durationMinutes = endMinutes - startMinutes;
+          // Handle wrap around if end time is numerically less than start time (next day early morning)
+          if (durationMinutes < 0) {
+            durationMinutes += 24 * 60;
+          }
 
           const isSameDay = startDt.hasSame(endDt, 'day')
           let daySpan = 1
@@ -572,20 +581,46 @@ export default defineComponent({
         .filter((item) => item !== null)
     })
 
-    const processedHolidays = computed(() => {
-      return new Set(
-        config.value.holidays.map((d: any) => {
-          const date = new Date(d)
-          return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
-        })
-      )
+const processedHolidays = computed(() => {
+      const isJalaali = config.value.calendar === 'jalaali'
+
+      const keys = config.value.holidays.map((d: any) => {
+        // 1. IF JALAALI MODE: Handle String inputs (e.g., "1403/01/01")
+        if (isJalaali && typeof d === 'string') {
+          // Split by slash or dash
+          const parts = d.split(/[-/]/).map((p: string) => parseInt(p, 10))
+          
+          if (parts.length === 3) {
+            const [jy, jm, jd] = parts
+            // Convert Jalaali Date -> Gregorian
+            // jalaali-js returns { gy, gm, gd } where gm is 1-based
+            const g = jalaali.toGregorian(jy, jm, jd)
+            
+            // Return key formatted for JS Date comparison (Month is 0-indexed)
+            return `${g.gy}-${g.gm - 1}-${g.gd}`
+          }
+        }
+
+        // 2. DEFAULT: Handle JS Date objects or Gregorian Strings
+        const date = new Date(d)
+        if (isNaN(date.getTime())) return null
+        
+        // Return standard Gregorian key
+        return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+      })
+
+      // Filter out nulls and create Set
+      return new Set(keys.filter((k: string | null) => k))
     })
 
     const isHoliday = (date: Date) => {
+      // The grid cells always contain valid JS Dates (Gregorian equivalent).
+      // We simply check if this date's string key exists in our processed set.
       return processedHolidays.value.has(
         `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
       )
     }
+
     const isCurrentDay = (date: Date) => {
       const today = new Date()
       return (
@@ -966,14 +1001,16 @@ const handleDragEnd = (event: MouseEvent | TouchEvent) => {
           const itemStartOffsetMin = startDt.diff(dayStartOf, 'minutes').minutes
           const topOffsetPx = (itemStartOffsetMin / (totalHours * 60)) * contentHeight
 
-          const durationMin = (adjustedEnd.getTime() - adjustedStart.getTime()) / 60000;
+          // CHANGED: Ghost height uses Time of Day diff
+          let durationMin = (adjustedEnd.getHours() * 60 + adjustedEnd.getMinutes()) -
+                            (adjustedStart.getHours() * 60 + adjustedStart.getMinutes());
+          if (durationMin < 0) durationMin += 24 * 60;
+          
           const heightPx = (durationMin / (totalHours * 60)) * contentHeight
 
           // Horizontal Position
-          // Match the new start date to a day index to determine column X
           const finalStartDayIndex = monthDays.value.findIndex((d) => {
              const dDate = new Date(d.date);
-             // Robust check using timestamps to avoid timezone issues near midnight
              return dDate.getDate() === adjustedStart.getDate() && 
                     dDate.getMonth() === adjustedStart.getMonth() &&
                     dDate.getFullYear() === adjustedStart.getFullYear();
@@ -981,76 +1018,36 @@ const handleDragEnd = (event: MouseEvent | TouchEvent) => {
           
           const visualStartIndex = finalStartDayIndex !== -1 ? finalStartDayIndex : targetDayIndex;
           
-          // Calculate exact position relative to the scrollable container's content
-          // Since calendarContent scrolls horizontally, its clientLeft is the view edge.
-          // The item's physical position is index * cellWidth relative to the start of the scroll area.
-          
-          // FIX: Calculate X based on Viewport Rect + Index Offset - Scroll Position
           let leftPos = 0;
           if (config.value.dir === 'rtl') {
-             // In RTL, 0 is on the right. 
-             // Logic mirrors: ViewportRight - ((index + 1) * width) ? 
-             // Simpler to rely on the CSS logic: 
-             // The item uses right: index * width%. 
-             // We need screen X.
-             // Let's use the DOM element of the header to be safe if possible, 
-             // otherwise fall back to math.
-             
-             // Fallback Math for RTL:
-             const totalWidth = monthDays.value.length * dayCellWidth.value;
-             const itemRightOffset = visualStartIndex * dayCellWidth.value;
-             // RTL Scroll is tricky across browsers (negative vs positive).
-             // Let's stick to the previous reliable approach:
-             // Math relative to containerRect.left is safest.
-             
-             // BUT, user asked to revert to previous logic.
-             // Previous logic used % math or simple offsets.
-             // Let's use simple offsets from the container rect.
-             
-             // Note: calendarContent.getBoundingClientRect().right is the visual right edge.
-             // The content flows to the left.
-             // The item is at: ContainerRight - padding? - ((index + 1) * width) + scroll?
-             
-             // Actually, let's use the header cell finding logic ONLY for X position 
-             // but verify it's inside the viewport.
              const headerChildren = Array.from(calendarHeader.value.children) as HTMLElement[];
              const targetHeader = headerChildren[visualStartIndex];
              if(targetHeader) {
                  leftPos = targetHeader.getBoundingClientRect().left;
              }
           } else {
-             // LTR
-             // X = ContainerLeft + (Index * Width) - ScrollLeft
-             // Note: containerRect.left IS the screen X of the container's left edge.
-             // We just add the offset.
-             // BUT we must account for the scroll.
-             // Actually, the grid-content moves. containerRect stays.
-             // So: targetX = containerRect.left + (visualStartIndex * dayCellWidth.value) - calendarContent.value.scrollLeft;
-             
-             // Wait, if we used `containerRect` from `calendarContent` (the scrollable parent),
-             // its `.left` is fixed on screen.
-             // The items inside move.
-             // So YES: origin + offset - scroll.
              leftPos = containerRect.left + (visualStartIndex * dayCellWidth.value) - calendarContent.value.scrollLeft;
           }
 
-          // Force use of header cell rect if available for perfect alignment
           const headerChildren = Array.from(calendarHeader.value.children) as HTMLElement[];
           const targetHeader = headerChildren[visualStartIndex];
           if(targetHeader) {
               leftPos = targetHeader.getBoundingClientRect().left;
           }
 
+          // Calculate day span for width
+          const endDt = DateTime.fromJSDate(adjustedEnd);
+          const isSameDay = startDt.hasSame(endDt, 'day');
+          let daySpan = 1;
+          if (!isSameDay) {
+            const dayDiff = endDt.diff(startDt, 'days').days;
+            daySpan = Math.floor(dayDiff) + 1;
+          }
+
           targetRect = {
-            // Top: ContainerTop + Padding + Offset. 
-            // Note: Vertical scroll is on `contentContainer` (parent).
-            // `calendarContent` (child) moves up/down.
-            // So `calendarContent.getBoundingClientRect().top` *already includes* the vertical scroll offset!
-            // We just add the internal grid offsets.
             top: containerRect.top + topPadding.value + topOffsetPx,
-            
             left: leftPos,
-            width: dayCellWidth.value * (originalItem.daySpan || 1), // approximate or calculate span
+            width: dayCellWidth.value * daySpan, 
             height: heightPx
           }
         }

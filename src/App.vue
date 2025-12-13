@@ -38,11 +38,12 @@ const gridItems = ref([
 
 const calendarGridOptions = {
   calendar: 'jalaali', 
-  mode: 'week',
+  mode: 'month',
   editable: true,
   zoom: true,
   lang: 'fa',
   dir:'ltr',
+  minTime:30,
   startHour: 8,
   endHour: 20,
   holidays: [
