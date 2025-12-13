@@ -563,9 +563,10 @@ export default defineComponent({
         .filter((item) => item !== null)
     })
 
-    const processedHolidays = computed(() => {
+const processedHolidays = computed(() => {
+      // Fix: Added (d: any) to satisfy TypeScript
       return new Set(
-        config.value.holidays.map(d => {
+        config.value.holidays.map((d: any) => {
           const date = new Date(d)
           return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
         })
@@ -671,7 +672,12 @@ export default defineComponent({
       document.removeEventListener('touchend', handleResizeEnd)
     }
 
-    const draggingItem = ref<{ item: any; originalIndex: number } | null>(null)
+    const draggingItem = ref<{ 
+      item: any; 
+      originalIndex: number; 
+      initialScrollTop?: number; 
+      initialScrollLeft?: number; 
+    } | null>(null)
     const selectedItemIndex = ref<number | null>(null)
     const draggedElement = ref<HTMLElement | null>(null)
     const dragStartX = ref(0)
