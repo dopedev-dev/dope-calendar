@@ -8,10 +8,7 @@
           'day-cell': true,
           'weekend-day': isWeekend(day.weekDay) || isHoliday(day.date),
           'current-day': isCurrentDay(day.date)
-        }" :style="{ 
-             minWidth: `${dayCellWidth}px`,
-             width: `${dayCellWidth}px` 
-           }">
+        }">
           <div class="day-number" :style="{
             color: isHoliday(day.date) || isWeekend(day.weekDay)
               ? 'var(--dc-weekend-day-color)'
@@ -46,14 +43,14 @@
       <div class="calendar-body hide-scrollbar" @scroll="handleContentScroll" @click="handleCalendarClick"
         ref="calendarContent" :style="{ height: calendarBodyHeight }">
 
-        <div class="grid-content" :style="{ minWidth: calendarBodyWidth, width: calendarBodyWidth }">
+        <div class="grid-content" :style="{ minWidth: '100%', width: '100%' }">
           <div class="horizontal-grid">
             <div v-for="(hour, index) in dayHoursList" :key="index">
               <div class="grid-line-h"></div>
             </div>
           </div>
           <div class="vertical-grid">
-            <div v-for="day in monthDays.length + 1" :key="day">
+            <div v-for="day in monthDays.length + 1" :key="day" :style="{ flexGrow: day <= monthDays.length ? 1 : 0 }">
               <div :class="{ 'grid-line-v': day !== 1 }"></div>
             </div>
           </div>
@@ -346,7 +343,7 @@ export default defineComponent({
       return hours
     })
 
-    // DEFAULT WIDTH (Used if CSS var not found)
+    // FIX 5: dayCellWidth is now dynamically measured
     const dayCellWidth = ref(56) 
     
     const dayCellHeight = ref(50) 
@@ -355,8 +352,11 @@ export default defineComponent({
     const maxZoomAmount = ref(config.value.maxZoom)
 
     const calendarBodyWidth = computed(() => {
-        // STRICT width calculation
-      return `${monthDays.value.length * dayCellWidth.value}px`
+        // FIX 6: Use 100% width for responsiveness, only use pixel width if needed for custom fixed mode
+        if (config.value.mode === 'week' || config.value.mode === 'month') {
+             return '100%'
+        }
+        return `${monthDays.value.length * dayCellWidth.value}px`
     })
 
     const calendarBodyHeight = computed(() => {
@@ -436,17 +436,44 @@ export default defineComponent({
       document.removeEventListener('touchcancel', handleZoomEnd)
     }
 
+    // New reactive width property to trigger recalculation on window resize
+    const windowWidth = ref(window.innerWidth);
+
+    const updateDayCellWidth = () => {
+        if (!calendarHeader.value) return;
+
+        const firstDayCell = calendarHeader.value?.querySelector('.day-cell') as HTMLElement;
+        if (firstDayCell) {
+            // Get the actual rendered pixel width of a day cell
+            dayCellWidth.value = firstDayCell.offsetWidth;
+        } else {
+             dayCellWidth.value = 56; 
+        }
+    };
+
     onMounted(() => {
+      const handleResize = () => {
+        windowWidth.value = window.innerWidth;
+        // Recalculate cell width on resize for drag accuracy
+        updateDayCellWidth(); 
+      };
+
+      window.addEventListener('resize', handleResize);
+      updateDayCellWidth(); // Initial calculation
+
       if (calendar.value && contentContainer.value) {
         const style = getComputedStyle(calendar.value)
         const widthStr = style.getPropertyValue('--dc-day-container-width').trim()
         const heightStr = style.getPropertyValue('--dc-day-cell-height').trim()
 
-        // Safely parse CSS Variable. If invalid, keep default (56).
+        // Safely parse CSS Variable for default hour column width if needed
         if (widthStr && widthStr.includes('px')) {
           const parsed = parseInt(widthStr, 10)
           if (!isNaN(parsed) && parsed > 0) {
-            dayCellWidth.value = parsed
+            // Only update dayCellWidth if we are not in responsive mode, otherwise use measured width
+            if (config.value.mode !== 'week' && config.value.mode !== 'month') {
+                dayCellWidth.value = parsed
+            }
           }
         }
         
@@ -457,11 +484,7 @@ export default defineComponent({
            }
         }
         
-        // Initial Zoom Logic
-        const containerWidth = contentContainer.value.clientWidth
-        const naturalGridWidth = monthDays.value.length * dayCellWidth.value
-        let requiredZoomX = 1
-        
+        // Initial Zoom Logic (simplified as stretching is now done by CSS)
         const containerHeight = contentContainer.value.clientHeight
         const naturalGridHeight = dayHoursList.value.length * dayCellHeight.value
         let requiredZoomY = 1
@@ -469,7 +492,7 @@ export default defineComponent({
           requiredZoomY = containerHeight / naturalGridHeight
         }
 
-        const initialZoom = Math.max(requiredZoomX, requiredZoomY)
+        const initialZoom = Math.max(1, requiredZoomY)
 
         if (initialZoom > 1) {
           zoomAmount.value = initialZoom
@@ -481,15 +504,19 @@ export default defineComponent({
         }
       }
     })
+    
+    // Watch to ensure drag metrics are ready when monthDays changes (e.g., date picker change)
+    watch(monthDays, () => {
+        nextTick(updateDayCellWidth);
+    });
+
 
     const processedItems = computed(() => {
-      // STRICT Layout: Use dayCellWidth value (pixels) for positioning
+      // FIX 7: Use Percentage for Horizontal Positioning/Sizing
+      const dayWidthPercent = 100 / monthDays.value.length 
       const totalHours = config.value.endHour - config.value.startHour
       const contentHeight = dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
       
-      // Calculate total grid width based on current cell width
-      const totalGridWidth = monthDays.value.length * dayCellWidth.value
-
       return props.modelValue
         .map((item, index) => {
           const startDt = DateTime.fromJSDate(item.start)
@@ -530,13 +557,12 @@ export default defineComponent({
           const topOffset = (itemStartOffset / (totalHours * 60)) * contentHeight
           const height = (itemDuration / (totalHours * 60)) * contentHeight
           
-          // Pixel-perfect width calculation
-          const widthPx = daySpan * dayCellWidth.value
-          const widthPercent = (widthPx / totalGridWidth) * 100
-
+          // FIX 7: Use Percentage Width and Position
+          const width = daySpan * dayWidthPercent
+          
           const positionStyle = config.value.dir === 'rtl'
-            ? { right: `${startDayIndex * dayCellWidth.value}px`, left: 'auto' }
-            : { left: `${startDayIndex * dayCellWidth.value}px`, right: 'auto' }
+            ? { right: `${startDayIndex * dayWidthPercent}%`, left: 'auto' }
+            : { left: `${startDayIndex * dayWidthPercent}%`, right: 'auto' }
 
           const totalDurationMinutes = endDt.diff(startDt, 'minutes').minutes
           const zIndex = Math.max(1, 100000 - Math.floor(totalDurationMinutes))
@@ -545,7 +571,7 @@ export default defineComponent({
             top: `calc(${topPadding.value}px + ${topOffset}px)`,
             ...positionStyle,
             height: `${height}px`,
-            width: `${widthPx}px`, // Force Pixel Width
+            width: `${width}%`, // Use percentage for positioning within the responsive grid
             position: 'absolute',
             zIndex
           }
@@ -563,8 +589,7 @@ export default defineComponent({
         .filter((item) => item !== null)
     })
 
-const processedHolidays = computed(() => {
-      // Fix: Added (d: any) to satisfy TypeScript
+    const processedHolidays = computed(() => {
       return new Set(
         config.value.holidays.map((d: any) => {
           const date = new Date(d)
@@ -822,7 +847,7 @@ const handleDragStart = (event: MouseEvent | TouchEvent, item: any, index: numbe
       const clientY = 'touches' in event ? (event.touches[0]?.clientY || 0) : event.clientY
       
       // Store initial scroll positions to calculate accurate Delta later
-      const initialScrollTop = calendarContent.value?.scrollTop || 0
+      const initialScrollTop = contentContainer.value?.scrollTop || 0
       const initialScrollLeft = calendarContent.value?.scrollLeft || 0
 
       draggingItem.value = { 
@@ -844,7 +869,7 @@ const handleDragStart = (event: MouseEvent | TouchEvent, item: any, index: numbe
       ghost.style.pointerEvents = 'none'
       ghost.style.opacity = '0.7'
       ghost.style.zIndex = '1000000'
-      ghost.style.boxShadow = '0 5px 15px rgba(0,0,0,0.3)'
+      ghost.style.boxShadow = '0 5px 15px rgba(0,0,0,0.3)' 
       ghost.style.width = `${rect.width}px`
       ghost.style.height = `${rect.height}px`
       ghost.style.left = `${rect.left}px`
@@ -904,27 +929,23 @@ const handleDragEnd = (event: MouseEvent | TouchEvent) => {
       } else {
         const originalItem = draggingItem.value.item
         const originalDurationMs = originalItem.end.getTime() - originalItem.start.getTime()
-        const currentScrollTop = calendarContent.value.scrollTop
+        const currentScrollTop = contentContainer.value.scrollTop // Use contentContainer for vertical scroll
         const currentScrollLeft = calendarContent.value.scrollLeft
 
         // --- 1. Calculate Horizontal Delta (Day Shift) ---
-        // How many pixels did we move horizontally?
-        // We add the scroll difference to handle if the user scrolled sideways while dragging
         const scrollDiffX = currentScrollLeft - (draggingItem.value.initialScrollLeft || 0)
         const deltaX = (clientX - dragStartX.value) + scrollDiffX
         
-        // Convert pixels to Days
-        const dayWidth = dayCellWidth.value // Uses the strict ref we added earlier
+        // Use the dynamically measured width for accurate pixel->day conversion
+        const dayWidth = dayCellWidth.value 
         let dayShift = Math.round(deltaX / dayWidth)
 
-        // RTL Correction: In RTL, dragging Left (negative X) means moving to the NEXT day (positive index)
-        // Dragging Right (positive X) means moving to PREV day (negative index)
+        // RTL Correction
         if (config.value.dir === 'rtl') {
            dayShift = dayShift * -1
         }
 
         // --- 2. Calculate Vertical Delta (Time Shift) ---
-        // How many pixels did we move vertically?
         const scrollDiffY = currentScrollTop - (draggingItem.value.initialScrollTop || 0)
         const deltaY = (clientY - dragStartY.value) + scrollDiffY
 
@@ -932,24 +953,14 @@ const handleDragEnd = (event: MouseEvent | TouchEvent) => {
         const contentHeight = dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
         const pixelsPerMinute = contentHeight / (totalHours * 60)
         
-        // Convert pixels to Minutes
         const minuteShift = deltaY / pixelsPerMinute
-        // Snap minutes to minTime (e.g. 15 min intervals)
         const snappedMinuteShift = Math.round(minuteShift / config.value.minTime) * config.value.minTime
 
         // --- 3. Apply Shifts to Create New Dates ---
         const originalStart = DateTime.fromJSDate(originalItem.start)
         
-        // Apply Day Shift
-        // Note: We simply add days. Luxon handles month/year roll-overs automatically.
         let newStartDt = originalStart.plus({ days: dayShift })
-
-        // Apply Time Shift
         newStartDt = newStartDt.plus({ minutes: snappedMinuteShift })
-
-        // Hard limits check (StartHour / EndHour)
-        // Ensure the time doesn't go before startHour or after endHour visually if needed, 
-        // but typically calendars allow dragging time freely.
 
         const adjustedStart = newStartDt.toJSDate()
         const adjustedEnd = new Date(adjustedStart.getTime() + originalDurationMs)
@@ -971,7 +982,6 @@ const handleDragEnd = (event: MouseEvent | TouchEvent) => {
         if (calendarContent.value && calendarHeader.value) {
           const containerRect = calendarContent.value.getBoundingClientRect()
           
-          // Re-calculate visual position based on the NEW Calculated Date
           const startDt = DateTime.fromJSDate(adjustedStart)
           const endDt = DateTime.fromJSDate(adjustedEnd)
 
@@ -985,7 +995,6 @@ const handleDragEnd = (event: MouseEvent | TouchEvent) => {
           const heightPx = (durationMin / (totalHours * 60)) * contentHeight
 
           // Horizontal Position
-          // Find the specific column index for the NEW Start Date
           const finalStartDayIndex = monthDays.value.findIndex((d) => {
              const dDate = new Date(d.date);
              return dDate.getDate() === adjustedStart.getDate() && 
@@ -993,7 +1002,6 @@ const handleDragEnd = (event: MouseEvent | TouchEvent) => {
                     dDate.getFullYear() === adjustedStart.getFullYear();
           });
 
-          // Fallback if date is dragged outside current view range
           const visualStartIndex = finalStartDayIndex !== -1 ? finalStartDayIndex : targetDayIndex;
 
           let daySpan = 1
@@ -1029,7 +1037,7 @@ const handleDragEnd = (event: MouseEvent | TouchEvent) => {
           }
 
           targetRect = {
-            top: containerRect.top + topPadding.value + topOffsetPx - calendarContent.value.scrollTop,
+            top: containerRect.top + topPadding.value + topOffsetPx - contentContainer.value.scrollTop, // Use contentContainer.scrollTop
             left: targetLeft,
             width: targetWidth,
             height: heightPx
@@ -1151,7 +1159,8 @@ const handleHorizontalResizeStart = (
       if (!horizontalResizingItem.value || !calendarContent.value || !config.value.editable) return
       const clientX = 'touches' in event ? (event.touches[0]?.clientX || 0) : event.clientX
       const deltaX = clientX - initialX.value
-      const dayWidthPixels = calendarContent.value.scrollWidth / monthDays.value.length
+      // FIX 8: Use current pixel width measurement for resizing
+      const dayWidthPixels = dayCellWidth.value; 
 
       const directionMultiplier = config.value.dir === 'rtl' ? -1 : 1
       const deltaDays = Math.round(deltaX / dayWidthPixels) * directionMultiplier
@@ -1246,7 +1255,8 @@ const handleHorizontalResizeStart = (
       deselectItems,
       isItemActive,
       getItemStyle,
-      dayCellWidth // Exported for template binding
+      dayCellWidth,
+      windowWidth // Exported for watch/resize detection
     }
   },
 })
@@ -1308,9 +1318,9 @@ const handleHorizontalResizeStart = (
   justify-content: center;
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
-  /* padding: 0.5rem; */
-  /* Removed min-width here to rely on inline styles */
   flex-shrink: 0;
+  flex-grow: 1; /* FIX 9: Takes up equal space */
+  min-width: 0; /* FIX 9: Required for proper flex behavior */
 }
 
 .day-number {
@@ -1346,7 +1356,6 @@ const handleHorizontalResizeStart = (
 .hours-column {
   flex-shrink: 0;
   height: calc(100% - 50px);
-  /* Width handled inline now */
   z-index: 10;
   bottom: 0px;
   background-color: var(--dc-bg);
@@ -1404,6 +1413,9 @@ const handleHorizontalResizeStart = (
   background-color: var(--dc-bg);
   overflow: hidden;
   position: relative;
+  /* FIX 10: Horizontal grid lines must use flex to match columns */
+  display: flex; 
+  flex-direction: column;
 }
 
 .horizontal-grid {
@@ -1425,13 +1437,12 @@ const handleHorizontalResizeStart = (
   position: absolute;
   z-index: 0;
   align-items: stretch;
-  justify-content: space-between;
+  /* FIX 11: Changed justify-content for vertical lines to use flex-grow in template */
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
   inset: 0;
-  gap: ();
 }
 
 .content-container {
@@ -1452,7 +1463,6 @@ const handleHorizontalResizeStart = (
 }
 
 .header-padding {
-  /* Width handled inline now */
   flex-shrink: 0;
   height: 100%;
 }
@@ -1490,6 +1500,7 @@ const handleHorizontalResizeStart = (
   user-select: none;
   box-sizing: border-box;
   transition: box-shadow 0.2s ease, transform 0.2s ease, top 0.3s ease, left 0.3s ease;
+  cursor: grab;
 }
 
 .calendar-item-wrapper.no-transition {

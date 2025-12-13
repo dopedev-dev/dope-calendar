@@ -37,11 +37,12 @@ const gridItems = ref([
 ])
 
 const calendarGridOptions = {
-  calendar: 'georgian', 
-  mode: 'month',
+  calendar: 'jalaali', 
+  mode: 'week',
   editable: true,
   zoom: true,
-  lang: 'en',
+  lang: 'fa',
+  dir:'ltr',
   startHour: 8,
   endHour: 20,
   holidays: [
