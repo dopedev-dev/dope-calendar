@@ -49,8 +49,8 @@ const calendarGridOptions = {
   endHour: 20,
   holidays: [
     // December 2025 Holidays
-    new Date('2025-12-25'), // Christmas Day
-    new Date('2025-12-31'), // New Year's Eve (Often treated as a half or full holiday in many places)
+    new Date('2025-12-17'), // Christmas Day
+    new Date('2025-12-10'), // New Year's Eve (Often treated as a half or full holiday in many places)
     
     // January 2026 (for testing month boundary)
     new Date('2026-01-01'), // New Year's Day

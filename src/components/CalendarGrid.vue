@@ -625,7 +625,6 @@ const processedHolidays = computed(() => {
       )
     }
 
-    
 
     const isCurrentDay = (date: Date) => {
       const today = new Date()
