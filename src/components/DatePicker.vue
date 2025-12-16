@@ -466,23 +466,34 @@ export default defineComponent({
     }
 
     const onTransitionEnd = async (e: Event) => {
+      // Ensure the event came from the slider and we are currently animating
       if (e.target !== e.currentTarget || !isAnimating.value) return
-      // Use silent update to snap back to center
+
+      // 1. Enable "silent" mode to disable CSS transitions globally
       isSilent.value = true
 
+      // 2. Update the display date (swapping the grids)
       if (slideOffset.value === -1) {
         displayDate.value = addViewMonths(displayDate.value, 1)
       } else if (slideOffset.value === 1) {
         displayDate.value = addViewMonths(displayDate.value, -1)
       }
 
+      // 3. Stop the animation flag and snap the slider back to 0 (center)
       isAnimating.value = false
       slideOffset.value = 0
 
+      // 4. Wait for Vue to update the DOM with the new grid data
       await nextTick()
-      requestAnimationFrame(() => { isSilent.value = false })
-    }
 
+      // 5. Use a small timeout instead of requestAnimationFrame.
+      // This ensures the browser has enough time to paint the new colors/styles
+      // (selected, today, disabled) while transitions are still DISABLED.
+      // This prevents the visual "jump" or "flash" of styles.
+      setTimeout(() => {
+        isSilent.value = false
+      }, 50)
+    }
     const canGoPrev = computed(() => {
       if (isFixed.value) return false
       if (!opts.value.minDate) return true
