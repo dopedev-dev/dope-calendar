@@ -1,25 +1,27 @@
 {
   "name": "dope-calendar",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "author": "Amir S. <amirsafaricg1380@gmail.com>",
   "contributors": [
     "Vahid V. <vhid.vz@gmail.com>"
   ],
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "nuxt.ts"
   ],
   "main": "./dist/dope-calendar.umd.cjs",
   "module": "./dist/dope-calendar.js",
   "types": "./dist/index.d.ts",
-"exports": {
-  ".": {
-    "types": "./dist/index.d.ts",
-    "import": "./dist/dope-calendar.js",
-    "require": "./dist/dope-calendar.umd.cjs"
+  "nuxt": "./nuxt.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/dope-calendar.js",
+      "require": "./dist/dope-calendar.umd.cjs"
+    },
+    "./calendar.css": "./dist/calendar.css"
   },
-  "./calendar.css": "./dist/calendar.css"
-},
   "license": "Apache-2.0",
   "scripts": {
     "dev": "vite",
@@ -39,6 +41,7 @@
     "jalaali-js": "^1.2.8"
   },
   "devDependencies": {
+    "@nuxt/kit": "^3.15.1",
     "@prettier/plugin-oxc": "^0.0.4",
     "@tsconfig/node22": "^22.0.2",
     "@types/jalaali-js": "^1.2.0",
@@ -61,11 +64,7 @@
     "vue-tsc": "^3.1.1"
   },
   "engines": {
-    "node": ">=22.x.x <23",
-    "npm": "~10.9.2"
+    "node": ">=18.0.0"
   },
-  "os": [
-    "!win32"
-  ],
   "packageManager": "pnpm@10.5.2"
 }
