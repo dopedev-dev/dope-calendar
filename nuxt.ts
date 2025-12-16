@@ -8,7 +8,8 @@ export default defineNuxtModule({
       nuxt: '^3.0.0 || ^4.0.0'
     }
   },
-  setup(options, nuxt) {
+  // FIX: Add ': any' to options and nuxt parameters
+  setup(options: any, nuxt: any) {
     const resolver = createResolver(import.meta.url)
 
     // 1. Automatically inject the CSS file

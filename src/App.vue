@@ -7,13 +7,13 @@ import DatePicker from './components/DatePicker.vue'
 const selectedDate = ref(new Date())
 
 const datePickerOptions = {
-  dateMode: 'jalaali',  
-  calendar: 'persian', 
+  // FIX: Add 'as const' to string literals that act as configuration types
+  dateMode: 'jalaali' as const,  
+  calendar: 'persian' as const, 
   enableTimePicker: true,
   color: '#3b82f6',
   locale: 'fa',
 }
-
 const today = new Date()
 const gridItems = ref([
   {
@@ -37,7 +37,7 @@ const gridItems = ref([
 ])
 
 const calendarGridOptions = {
-  calendar: 'georgian',
+  calendar: 'jalaali',
   // calendar:georgian', 
   mode: 'month',
   editable: true,
