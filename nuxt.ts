@@ -14,12 +14,10 @@ export default defineNuxtModule({
     // 1. Automatically inject the CSS file
     nuxt.options.css.push(resolver.resolve('./dist/calendar.css'))
 
-    // 2. Automatically register the component(s)
-    // This allows users to use <DopeCalendar /> without importing it manually.
-    // Ensure your src/index.ts exports a component named 'DatePicker' or similar.
+    // 2. Automatically register the component
     addComponent({
-      name: 'DopeCalendar', // The tag name to be used in Nuxt
-      export: 'default',     // Assuming the default export of your package is the main component
+      name: 'DopeCalendar', 
+      export: 'default',     
       filePath: resolver.resolve('./dist/dope-calendar.js')
     })
   }

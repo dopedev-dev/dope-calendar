@@ -6,7 +6,8 @@
     "cypress.config.*",
     "nightwatch.conf.*",
     "playwright.config.*",
-    "eslint.config.*"
+    "eslint.config.*",
+    "nuxt.ts" 
   ],
   "compilerOptions": {
     "noEmit": true,
