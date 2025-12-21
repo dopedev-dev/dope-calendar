@@ -8,8 +8,8 @@ const selectedDate = ref(new Date())
 
 const datePickerOptions = {
   // FIX: Add 'as const' to string literals that act as configuration types
-  dateMode: 'jalaali' as const,  
-  calendar: 'persian' as const, 
+  dateMode: 'jalaali' as const,
+  calendar: 'persian' as const,
   enableTimePicker: true,
   color: '#3b82f6',
   locale: 'fa',
@@ -32,7 +32,7 @@ const gridItems = ref([
     title: 'Project Review',
     start: new Date(new Date().setHours(15, 0, 0, 0)),
     end: new Date(new Date().setHours(16, 30, 0, 0)),
-    style: { backgroundColor: 'rgba(249, 115, 22, 0.8)' } 
+    style: { backgroundColor: 'rgba(249, 115, 22, 0.8)' }
   }
 ])
 
@@ -43,15 +43,17 @@ const calendarGridOptions = {
   editable: true,
   zoom: true,
   lang: 'fa',
-  dir:'ltr',
-  minTime:30,
+  dir: 'ltr',
+  minTime: 30,
   startHour: 8,
   endHour: 20,
+// startDate: new Date(),
+// endDate: new Date(),
   holidays: [
     // December 2025 Holidays
     new Date('2025-12-17'), // Christmas Day
     new Date('2025-12-10'), // New Year's Eve (Often treated as a half or full holiday in many places)
-    
+
     // January 2026 (for testing month boundary)
     new Date('2026-01-01'), // New Year's Day
     new Date('2026-01-02'), // Day after New Year's Day
@@ -67,10 +69,7 @@ const calendarGridOptions = {
       <div class="card">
         <h2>Date Picker</h2>
         <div class="picker-wrapper">
-          <DatePicker 
-            v-model="selectedDate" 
-            :option="datePickerOptions" 
-          />
+          <DatePicker v-model="selectedDate" :option="datePickerOptions" />
         </div>
         <p class="output">Selected: {{ selectedDate }}</p>
       </div>
@@ -78,15 +77,12 @@ const calendarGridOptions = {
       <div class="card grid-card">
         <h2>Calendar Grid</h2>
         <div class="grid-wrapper">
-          <CalendarGrid 
-            v-model="gridItems" 
-            :options="calendarGridOptions"
-          >
+          <CalendarGrid v-model="gridItems" :options="calendarGridOptions">
             <template #item="{ item }">
               <div class="item">
                 <strong>{{ item.title }}</strong>
                 <span>
-                  {{ item.start.getHours() }}:{{ item.start.getMinutes().toString().padStart(2, '0') }} - 
+                  {{ item.start.getHours() }}:{{ item.start.getMinutes().toString().padStart(2, '0') }} -
                   {{ item.end.getHours() }}:{{ item.end.getMinutes().toString().padStart(2, '0') }}
                 </span>
               </div>
@@ -143,7 +139,8 @@ h2 {
 }
 
 .grid-wrapper {
-  height: 600px; /* Important: Grid needs explicit height */
+  height: 600px;
+  /* Important: Grid needs explicit height */
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   overflow: hidden;
@@ -166,8 +163,8 @@ h2 {
   color: white;
   border-radius: 4px;
   height: 100%;
-  overflow: hidden; 
+  overflow: hidden;
   font-size: 12px;
-  position: relative; 
+  position: relative;
 }
 </style>
