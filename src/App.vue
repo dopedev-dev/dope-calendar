@@ -39,7 +39,7 @@ const gridItems = ref([
 const calendarGridOptions = {
   calendar: 'jalaali',
   // calendar:georgian', 
-  mode: 'month',
+  mode: 'week',
   editable: true,
   zoom: true,
   lang: 'fa',
@@ -47,8 +47,8 @@ const calendarGridOptions = {
   minTime: 30,
   startHour: 8,
   endHour: 20,
-// startDate: new Date(),
-// endDate: new Date(),
+  startDate: new Date(),
+  // endDate: new Date(),
   holidays: [
     // December 2025 Holidays
     new Date('2025-12-17'), // Christmas Day
