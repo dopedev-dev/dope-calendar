@@ -68,13 +68,15 @@ Huge thanks to our amazing sponsors! Your support helps keep this project alive 
     </td>
     <td align="center">
       <a href="https://i.ibb.co/zhXybDsM/nobeen.png">
-         <img src="https://nobeen.ir/nobin-logo.png" height="200" width="200" alt="Nobeen" style="padding: 20px; border: 1px solid #eee; border-radius: 12px; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+         <img src="https://nobeen.ir/nobin-logo.png" height="200" width="200" alt="Nobeen" style="padding: 20px; border: 1px solid #eee; border-radius: 12px; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.1);    min-height: 200px;
+    object-fit: contain; max-height:200px; height:200px; width:200px; max-width:200px; min-width:200px">
         <br>
         <strong>Nobeen</strong>
       </a>
     </td>
   </tr>
 </table>
+
 
 # License
 
