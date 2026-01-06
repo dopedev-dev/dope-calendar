@@ -75,7 +75,7 @@ The DopeDatePicker supports single-date selection across multiple calendar syste
 |**options / option**|`Object`|`{}`|The configuration object containing the settings below.|
 |`calendar`|`'gregory' \| 'persian' \| 'islamic'`|`'gregory'`|The calendar system displayed to the user.|
 |`dateMode`|`'georgian' \| 'jalaali' \| 'islamic'`|`'georgian'`|Alias for the calendar logic mode.|
-|`mode`|`'date' \| 'month' \| 'year'`|`'date'`|The initial view level of the picker.|
+|`mode`|`'date' \| 'month' \| 'custom'`|`'date'`|The initial view level of the picker.|
 |`locale`|`string`|`'default'`|Language for labels (e.g., `'fa'` for Persian).|
 |`dir`|`'ltr' \| 'rtl'`|_(auto)_|Layout direction; auto-detects based on calendar mode.|
 |`enableTimePicker`|`boolean`|`false`|When true, shows an interactive time selection footer.|
