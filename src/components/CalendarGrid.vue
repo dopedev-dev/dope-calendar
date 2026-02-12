@@ -461,8 +461,8 @@ export default defineComponent({
       const totalHours = config.value.endHour - config.value.startHour
       const contentHeight = dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
 
-      // GET DRAGGING INDEX
       const draggingIndex = draggingItem.value ? draggingItem.value.originalIndex : -1
+      const selectedIndex = selectedItemIndex.value;
 
       // 1. Map items
       const rawItems = props.modelValue
@@ -477,6 +477,7 @@ export default defineComponent({
           let endMinutes = endDt.getHours() * 60 + endDt.getMinutes();
 
           let durationMinutes = endMinutes - startMinutes;
+          // Handle day wrap or negative duration for z-index calc
           if (durationMinutes < 0) durationMinutes += 24 * 60;
           if (durationMinutes < 15) durationMinutes = 15;
 
@@ -501,6 +502,7 @@ export default defineComponent({
             _endMinutes: startMinutes + durationMinutes,
             _topOffset: topOffset,
             _height: height,
+            itemDuration: durationMinutes, // Explicitly pass duration for sorting
             daySpan
           }
         })
@@ -516,7 +518,7 @@ export default defineComponent({
 
       const finalItems: any[] = [];
 
-      // 3. Add Dragged Item Separately (Hidden)
+      // 3. Add Dragged Item (Hidden)
       if (draggingIndex !== -1) {
         const dragged = rawItems.find(i => i.originalIndex === draggingIndex);
         if (dragged) {
@@ -525,28 +527,30 @@ export default defineComponent({
         }
       }
 
-      // 4. Apply Clustering & Packing
+      // 4. Processing
       Object.keys(itemsByDay).forEach(key => {
         const dayIndex = parseInt(key);
         const dayItems = itemsByDay[dayIndex];
 
-        // Sort by start time
-        dayItems.sort((a, b) => {
+        // SEPARATION: Only single-day events participate in column squeezing
+        const packableItems = dayItems.filter(i => i.daySpan === 1);
+        const fixedItems = dayItems.filter(i => i.daySpan > 1);
+
+        // --- A. Process Single-Day Clusters (Standard Events) ---
+        packableItems.sort((a, b) => {
           if (a._startMinutes === b._startMinutes) return b._endMinutes - a._endMinutes;
           return a._startMinutes - b._startMinutes;
         });
 
-        // 4a. Create Clusters (Groups of intersecting events)
         const clusters: any[][] = [];
         let currentCluster: any[] = [];
         let clusterEnd = -1;
 
-        dayItems.forEach(item => {
+        packableItems.forEach(item => {
           if (currentCluster.length === 0) {
             currentCluster.push(item);
             clusterEnd = item._endMinutes;
           } else {
-            // If item starts AFTER the current cluster finishes, it's a new cluster
             if (item._startMinutes >= clusterEnd) {
               clusters.push(currentCluster);
               currentCluster = [item];
@@ -559,10 +563,8 @@ export default defineComponent({
         });
         if (currentCluster.length > 0) clusters.push(currentCluster);
 
-        // 4b. Process each cluster independently
         clusters.forEach(clusterItems => {
           const columns: any[][] = [];
-
           clusterItems.forEach(item => {
             let placed = false;
             for (let i = 0; i < columns.length; i++) {
@@ -584,8 +586,9 @@ export default defineComponent({
           const numCols = columns.length;
 
           clusterItems.forEach(item => {
-            const colWidthPercent = dayWidthPercent / numCols;
-            const offsetInDay = item._colIndex * colWidthPercent;
+            const isSelected = item.originalIndex === selectedIndex;
+            const colWidthPercent = isSelected ? dayWidthPercent : (dayWidthPercent / numCols);
+            const offsetInDay = isSelected ? 0 : (item._colIndex * (dayWidthPercent / numCols));
 
             let positionStyle = {};
             if (config.value.dir === 'rtl') {
@@ -594,21 +597,54 @@ export default defineComponent({
               positionStyle = { left: `${(dayIndex * dayWidthPercent) + offsetInDay}%`, right: 'auto' };
             }
 
-            const zIndex = Math.max(100000, 100000 - Math.floor(item.itemDuration || 0)) + item._colIndex;
+            // Z-INDEX LOGIC (Single Day):
+            // Base: 2000.
+            // Bonus: 1440 - Duration (Shorter items get higher bonus).
+            // Result: Small events float on top of large daily events.
+            const durationBonus = 1440 - (item.itemDuration || 0);
+            const zIndex = isSelected ? 1000000 : (2000 + durationBonus + item._colIndex);
 
             item.style = {
               top: `calc(${topPadding.value}px + ${item._topOffset}px)`,
               ...positionStyle,
               height: `${item._height}px`,
-              width: `${item.daySpan > 1 ? item.daySpan * dayWidthPercent : colWidthPercent}%`,
+              width: `${colWidthPercent}%`,
               position: 'absolute',
               zIndex: zIndex,
               boxSizing: 'border-box',
               border: '1px solid white'
             };
           });
-
           finalItems.push(...clusterItems);
+        });
+
+        // --- B. Process Multi-Day Items (Background Overlay) ---
+        fixedItems.forEach(item => {
+          const isSelected = item.originalIndex === selectedIndex;
+
+          let positionStyle = {};
+          if (config.value.dir === 'rtl') {
+            positionStyle = { right: `${dayIndex * dayWidthPercent}%`, left: 'auto' };
+          } else {
+            positionStyle = { left: `${dayIndex * dayWidthPercent}%`, right: 'auto' };
+          }
+
+          // Z-INDEX LOGIC (Multi-Day):
+          // Base: 100 (Much lower than single-day).
+          // Result: These always stay behind single-day events.
+          const zIndex = isSelected ? 1000000 : 100;
+
+          item.style = {
+            top: `calc(${topPadding.value}px + ${item._topOffset}px)`,
+            ...positionStyle,
+            height: `${item._height}px`,
+            width: `${item.daySpan * dayWidthPercent}%`,
+            position: 'absolute',
+            zIndex: zIndex,
+            boxSizing: 'border-box',
+            border: '1px solid white'
+          };
+          finalItems.push(item);
         });
       });
 
