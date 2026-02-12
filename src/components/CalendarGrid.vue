@@ -49,7 +49,12 @@
 
       <div class="calendar-body hide-scrollbar" @scroll="handleContentScroll" @click="handleCalendarClick"
         ref="calendarContent" :style="{ height: calendarBodyHeight }">
-
+        <div v-if="shouldShowCurrentTime" class="current-time-line" :style="{ top: currentTimeTop }">
+          <slot name="current-time">
+            <div class="current-time-dot"></div>
+            <div class="current-time-bar"></div>
+          </slot>
+        </div>
         <div class="grid-content" :style="{ minWidth: calendarBodyWidth, width: '100%' }"
           @mousemove="handleGridMouseMove" @mouseleave="handleGridMouseLeave">
 
@@ -70,7 +75,9 @@
                 v-if="ghostEvent && selectedItemIndex === null && !isDragging && options.autoCreateEvent && config.editable"
                 class="ghost-event" :style="ghostEventStyle" @click.stop="triggerAddEvent">
                 <slot name="add-event-button" :hover-data="ghostEvent">
-                  <div class="ghost-plus-icon">+</div>
+                  <div class="ghost-plus-icon">
+                    <div style="height:32px">+</div>
+                  </div>
                 </slot>
               </div>
             </transition>
@@ -108,12 +115,7 @@
               </div>
             </div>
 
-            <div v-if="shouldShowCurrentTime" class="current-time-line" :style="{ top: currentTimeTop }">
-              <slot name="current-time">
-                <div class="current-time-dot"></div>
-                <div class="current-time-bar"></div>
-              </slot>
-            </div>
+
 
           </div>
         </div>
@@ -507,9 +509,7 @@ export default defineComponent({
       // 2. Group by Day
       const itemsByDay: Record<number, any[]> = {};
       rawItems.forEach(item => {
-        // FILTER: If this is the dragged item, DO NOT include in packing group
         if (config.value.editable && item.originalIndex === draggingIndex) return;
-
         if (!itemsByDay[item._startDayIndex]) itemsByDay[item._startDayIndex] = [];
         itemsByDay[item._startDayIndex].push(item);
       });
@@ -517,7 +517,6 @@ export default defineComponent({
       const finalItems: any[] = [];
 
       // 3. Add Dragged Item Separately (Hidden)
-      // We keep it in DOM but hide it so the ghost is the only visual representation
       if (draggingIndex !== -1) {
         const dragged = rawItems.find(i => i.originalIndex === draggingIndex);
         if (dragged) {
@@ -526,61 +525,91 @@ export default defineComponent({
         }
       }
 
-      // 4. Apply Packing Algorithm (To others only)
+      // 4. Apply Clustering & Packing
       Object.keys(itemsByDay).forEach(key => {
         const dayIndex = parseInt(key);
         const dayItems = itemsByDay[dayIndex];
 
+        // Sort by start time
         dayItems.sort((a, b) => {
           if (a._startMinutes === b._startMinutes) return b._endMinutes - a._endMinutes;
           return a._startMinutes - b._startMinutes;
         });
 
-        const columns: any[][] = [];
+        // 4a. Create Clusters (Groups of intersecting events)
+        const clusters: any[][] = [];
+        let currentCluster: any[] = [];
+        let clusterEnd = -1;
+
         dayItems.forEach(item => {
-          let placed = false;
-          for (let i = 0; i < columns.length; i++) {
-            const col = columns[i];
-            const last = col[col.length - 1];
-            if (item._startMinutes >= last._endMinutes) {
-              col.push(item);
-              item._colIndex = i;
-              placed = true;
-              break;
+          if (currentCluster.length === 0) {
+            currentCluster.push(item);
+            clusterEnd = item._endMinutes;
+          } else {
+            // If item starts AFTER the current cluster finishes, it's a new cluster
+            if (item._startMinutes >= clusterEnd) {
+              clusters.push(currentCluster);
+              currentCluster = [item];
+              clusterEnd = item._endMinutes;
+            } else {
+              currentCluster.push(item);
+              if (item._endMinutes > clusterEnd) clusterEnd = item._endMinutes;
             }
           }
-          if (!placed) {
-            columns.push([item]);
-            item._colIndex = columns.length - 1;
-          }
         });
+        if (currentCluster.length > 0) clusters.push(currentCluster);
 
-        const numCols = columns.length;
-        dayItems.forEach(item => {
-          const colWidthPercent = dayWidthPercent / numCols;
-          const offsetInDay = item._colIndex * colWidthPercent;
+        // 4b. Process each cluster independently
+        clusters.forEach(clusterItems => {
+          const columns: any[][] = [];
 
-          let positionStyle = {};
-          if (config.value.dir === 'rtl') {
-            positionStyle = { right: `${(dayIndex * dayWidthPercent) + offsetInDay}%`, left: 'auto' };
-          } else {
-            positionStyle = { left: `${(dayIndex * dayWidthPercent) + offsetInDay}%`, right: 'auto' };
-          }
+          clusterItems.forEach(item => {
+            let placed = false;
+            for (let i = 0; i < columns.length; i++) {
+              const col = columns[i];
+              const last = col[col.length - 1];
+              if (item._startMinutes >= last._endMinutes) {
+                col.push(item);
+                item._colIndex = i;
+                placed = true;
+                break;
+              }
+            }
+            if (!placed) {
+              columns.push([item]);
+              item._colIndex = columns.length - 1;
+            }
+          });
 
-          const zIndex = Math.max(100000, 100000 - Math.floor(item.itemDuration || 0)) + item._colIndex;
+          const numCols = columns.length;
 
-          item.style = {
-            top: `calc(${topPadding.value}px + ${item._topOffset}px)`,
-            ...positionStyle,
-            height: `${item._height}px`,
-            width: `${item.daySpan > 1 ? item.daySpan * dayWidthPercent : colWidthPercent}%`,
-            position: 'absolute',
-            zIndex: zIndex,
-            boxSizing: 'border-box',
-            border: '1px solid white'
-          };
+          clusterItems.forEach(item => {
+            const colWidthPercent = dayWidthPercent / numCols;
+            const offsetInDay = item._colIndex * colWidthPercent;
+
+            let positionStyle = {};
+            if (config.value.dir === 'rtl') {
+              positionStyle = { right: `${(dayIndex * dayWidthPercent) + offsetInDay}%`, left: 'auto' };
+            } else {
+              positionStyle = { left: `${(dayIndex * dayWidthPercent) + offsetInDay}%`, right: 'auto' };
+            }
+
+            const zIndex = Math.max(100000, 100000 - Math.floor(item.itemDuration || 0)) + item._colIndex;
+
+            item.style = {
+              top: `calc(${topPadding.value}px + ${item._topOffset}px)`,
+              ...positionStyle,
+              height: `${item._height}px`,
+              width: `${item.daySpan > 1 ? item.daySpan * dayWidthPercent : colWidthPercent}%`,
+              position: 'absolute',
+              zIndex: zIndex,
+              boxSizing: 'border-box',
+              border: '1px solid white'
+            };
+          });
+
+          finalItems.push(...clusterItems);
         });
-        finalItems.push(...dayItems);
       });
 
       return finalItems;
@@ -1530,6 +1559,7 @@ export default defineComponent({
   background: rgba(255, 255, 255, 0.6);
   width: 24px;
   height: 24px;
+  overflow: visible;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -1562,18 +1592,21 @@ export default defineComponent({
   height: 12px;
   border-radius: 50%;
   background-color: var(--dc-now-indicator-color, #ef4444);
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  position: sticky;
+  /* Changed from absolute to sticky */
   z-index: 21;
+  transform: translateY(0%);
+  flex-shrink: 0;
+  /* Removed top/transform since flex align-items:center handles vertical centering in the line */
 }
 
 [dir="ltr"] .current-time-dot {
-  left: -6px;
+  left: 0;
 }
 
+/* RTL: Stick to right edge */
 [dir="rtl"] .current-time-dot {
-  right: -6px;
+  right: 0;
 }
 
 .current-time-bar {

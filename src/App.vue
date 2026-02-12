@@ -54,18 +54,18 @@ const calendarGridOptions = {
     new Date('2026-01-01'),
     new Date('2026-01-02'),
   ],
-  autoCreateEvent: false,
-  headerFormat:'dual'
+  autoCreateEvent: true,
+  headerFormat: 'dual'
 }
-watch(()=> gridItems.value,()=>{
+watch(() => gridItems.value, () => {
   console.log('items updated')
-},{deep:true,immediate:true})
+}, { deep: true, immediate: true })
 </script>
 
 <template>
   <div class="container">
     <h1>Dope Calendar Test</h1>
-
+    
     <div class="showcase">
       <div class="card">
         <h2>Date Picker</h2>
@@ -168,4 +168,18 @@ h2 {
   font-size: 12px;
   position: relative;
 }
+
+.ghost-event {
+  pointer-events: auto;
+  cursor: pointer;
+  background-color: var(--dc-ghost-bg, rgba(59, 130, 246, 0.2));
+  border: var(--dc-ghost-border, 2px dashed #3b82f6);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+
 </style>
