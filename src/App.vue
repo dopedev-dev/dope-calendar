@@ -55,6 +55,7 @@ const calendarGridOptions = {
     new Date('2026-01-02'),
   ],
   autoCreateEvent: false,
+  headerFormat:'dual'
 }
 watch(()=> gridItems.value,()=>{
   console.log('items updated')

@@ -19,6 +19,7 @@
           }">
             {{ config.lang === 'fa' ? toPersianNum(day.day) : day.day }}
           </div>
+
           <div class="day-name" :style="{
             color: isWeekend(day.weekDay) || isHoliday(day.date)
               ? 'var(--dc-weekend-day-color)'
@@ -27,6 +28,11 @@
             fontWeight: 'var(--dc-day-name-font-weight)'
           }">
             {{ getDayTitle(day.weekDay) }}
+          </div>
+
+          <div v-if="config.headerFormat === 'dual'" class="day-name"
+            style="font-size: 10px; margin-top: 1px; opacity: 0.7;">
+            {{ getGeorgianDateString(day.date) }}
           </div>
         </div>
       </div>
@@ -60,11 +66,10 @@
 
           <div class="content">
             <transition name="fade">
-              <div v-if="ghostEvent && selectedItemIndex === null && !isDragging && config.editable"
-                :key="ghostEvent.startDt.getTime()" :class="['ghost-event', config.ghostClass]" :style="ghostEventStyle"
-                @click.stop="triggerAddEvent">
-
-                <slot name="add-event-button" :hover-data="ghostEvent" :trigger="triggerAddEvent">
+              <div
+                v-if="ghostEvent && selectedItemIndex === null && !isDragging && options.autoCreateEvent && config.editable"
+                class="ghost-event" :style="ghostEventStyle" @click.stop="triggerAddEvent">
+                <slot name="add-event-button" :hover-data="ghostEvent">
                   <div class="ghost-plus-icon">+</div>
                 </slot>
               </div>
@@ -142,6 +147,7 @@ interface CalendarOptions {
   ghostClass?: string;          // NEW: Custom class for ghost element
   ghostStyle?: Record<string, any>; // NEW: Custom style object
   newEventDefaults?: Record<string, any>; // NEW: Default props for new items
+  headerFormat?: 'default' | 'dual'
 }
 
 export default defineComponent({
@@ -185,10 +191,17 @@ export default defineComponent({
         lang: 'fa',
         format: '24h',
         holidays: [],
-        autoCreateEvent: true // Default behavior
+        autoCreateEvent: true,
+        headerFormat: 'default' // Default behavior
       }
       return { ...defaults, ...props.options }
     })
+
+
+    const getGeorgianDateString = (date: Date) => {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      return `${date.getDate()}${months[date.getMonth()]}`
+    }
 
     useDragToScroll(calendarHeader)
 
@@ -660,6 +673,7 @@ export default defineComponent({
     const handleGridMouseMove = (e: MouseEvent) => {
       if (!config.value.editable) return;
 
+      // CONFLICT FIX: If hovering over an existing item, DO NOT show ghost event
       const target = e.target as HTMLElement;
       if (target.closest('.calendar-item-wrapper')) {
         ghostEvent.value = null;
@@ -667,9 +681,11 @@ export default defineComponent({
       }
 
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
 
+      // Day Index
       const dayW = rect.width / monthDays.value.length;
       let dayIdx = Math.floor(x / dayW);
       if (config.value.dir === 'rtl') {
@@ -681,6 +697,8 @@ export default defineComponent({
         return;
       }
 
+      // Time
+      // Account for topPadding in grid visual calculation
       const effectiveY = y - topPadding.value;
       const contentHeight = dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value;
 
@@ -688,7 +706,7 @@ export default defineComponent({
       const totalMin = (config.value.endHour - config.value.startHour) * 60;
       const rawMin = percent * totalMin;
 
-      const snap = config.value.minTime || 30; // Default to 30 if undefined
+      const snap = 30; // 30 min snap
       const snappedMin = Math.floor(rawMin / snap) * snap;
 
       const startTotalMin = config.value.startHour * 60 + snappedMin;
@@ -696,22 +714,14 @@ export default defineComponent({
       // Date calc
       const dateBase = monthDays.value[dayIdx].date;
       const startDt = new Date(dateBase);
-      startDt.setHours(Math.floor(startTotalMin / 60), startTotalMin % 60, 0, 0);
+      startDt.setHours(Math.floor(startTotalMin / 60), startTotalMin % 60);
 
       const endDt = new Date(startDt);
-      endDt.setMinutes(endDt.getMinutes() + (config.value.minTime || 60)); // Default duration
-
-      // STABILITY CHECK: If slot hasn't changed, DO NOT update.
-      // This prevents DOM thrashing which kills the click event.
-      if (ghostEvent.value &&
-        ghostEvent.value.dayIdx === dayIdx &&
-        ghostEvent.value.startDt.getTime() === startDt.getTime()) {
-        return;
-      }
+      endDt.setMinutes(endDt.getMinutes() + 60); // Default 1 hour
 
       // Visual
       const topPx = (snappedMin / totalMin) * contentHeight + topPadding.value;
-      const heightPx = ((config.value.minTime || 60) / totalMin) * contentHeight;
+      const heightPx = (60 / totalMin) * contentHeight;
 
       ghostEvent.value = {
         dayIdx,
@@ -753,25 +763,27 @@ export default defineComponent({
     const triggerAddEvent = () => {
       if (!ghostEvent.value) return;
 
+      // Create a clean object with valid Date instances
       const newItem = {
         title: 'New Event',
         start: new Date(ghostEvent.value.startDt),
         end: new Date(ghostEvent.value.endDt),
         style: { backgroundColor: 'var(--dc-current-day-color)' },
+        // Allow spreading custom properties if needed
         ...config.value.newEventDefaults
       };
 
-      // 1. Emit simple event
+      // Emit event for parent to handle (custom logic)
       emit('event-create', newItem);
 
-      // 2. Auto-add to internal model if enabled
+      // Auto-add logic
       if (config.value.autoCreateEvent) {
-        // Create a FRESH array reference to trigger watchers
+        // Clone the array to ensure reactivity triggers in parent
         const newList = [...props.modelValue, newItem];
         emit('update:modelValue', newList);
       }
 
-      // 3. Clear ghost event immediately
+      // Clear ghost event
       ghostEvent.value = null;
     };
 
@@ -1459,6 +1471,7 @@ export default defineComponent({
       processedItems,
       handleResizeEnd,
       handleResizeStart,
+      getGeorgianDateString,
       handleDragStart,
       handleItemClick,
       draggingItem,
