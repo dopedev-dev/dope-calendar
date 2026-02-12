@@ -71,8 +71,9 @@
 
           <div class="content">
             <transition name="fade">
-              <div v-if="ghostEvent && selectedItemIndex === null && !isDragging && options.canCreate && config.editable" class="ghost-event"
-                :style="ghostEventStyle" @click.stop="triggerAddEvent">
+              <div
+                v-if="ghostEvent && selectedItemIndex === null && !isDragging && options.canCreate && config.editable"
+                class="ghost-event" :style="ghostEventStyle" @click.stop="triggerAddEvent">
                 <slot name="add-event-button" :hover-data="ghostEvent">
                   <div class="ghost-plus-icon">
                     <div style="height:32px">+</div>
@@ -172,6 +173,8 @@ export default defineComponent({
     const contentContainer = ref<HTMLElement | null>(null)
     const isZooming = ref(false)
     const silentUpdateIndex = ref<number | null>(null)
+    let startY = 0;
+    const dragFromUpperHalf = ref(true);
     const isDragging = computed(() => draggingItem.value !== null);
 
     const sidebarWidth = ref(50)
@@ -193,9 +196,12 @@ export default defineComponent({
         lang: 'fa',
         format: '24h',
         holidays: [],
+        ghostClass: '',
+        ghostStyle: {},
+        newEventDefaults: {},
         autoCreateEvent: true,
         headerFormat: 'default', // Default behavior
-        canCreate:true,
+        canCreate: true,
       }
       return { ...defaults, ...props.options }
     })
@@ -503,7 +509,7 @@ export default defineComponent({
             _endMinutes: startMinutes + durationMinutes,
             _topOffset: topOffset,
             _height: height,
-            itemDuration: durationMinutes, // Explicitly pass duration for sorting
+            itemDuration: durationMinutes,
             daySpan
           }
         })
@@ -514,7 +520,9 @@ export default defineComponent({
       rawItems.forEach(item => {
         if (config.value.editable && item.originalIndex === draggingIndex) return;
         if (!itemsByDay[item._startDayIndex]) itemsByDay[item._startDayIndex] = [];
-        itemsByDay[item._startDayIndex].push(item);
+
+        // TS FIX: Added !
+        itemsByDay[item._startDayIndex]!.push(item);
       });
 
       const finalItems: any[] = [];
@@ -531,7 +539,8 @@ export default defineComponent({
       // 4. Processing
       Object.keys(itemsByDay).forEach(key => {
         const dayIndex = parseInt(key);
-        const dayItems = itemsByDay[dayIndex];
+        // TS FIX: Added !
+        const dayItems = itemsByDay[dayIndex]!;
 
         // SEPARATION: Only single-day events participate in column squeezing
         const packableItems = dayItems.filter(i => i.daySpan === 1);
@@ -569,7 +578,8 @@ export default defineComponent({
           clusterItems.forEach(item => {
             let placed = false;
             for (let i = 0; i < columns.length; i++) {
-              const col = columns[i];
+              // TS FIX: Added !
+              const col = columns[i]!;
               const last = col[col.length - 1];
               if (item._startMinutes >= last._endMinutes) {
                 col.push(item);
@@ -598,10 +608,7 @@ export default defineComponent({
               positionStyle = { left: `${(dayIndex * dayWidthPercent) + offsetInDay}%`, right: 'auto' };
             }
 
-            // Z-INDEX LOGIC (Single Day):
-            // Base: 2000.
-            // Bonus: 1440 - Duration (Shorter items get higher bonus).
-            // Result: Small events float on top of large daily events.
+            // Z-Index: Shorter duration = Higher Z-Index
             const durationBonus = 1440 - (item.itemDuration || 0);
             const zIndex = isSelected ? 1000000 : (2000 + durationBonus + item._colIndex);
 
@@ -630,9 +637,6 @@ export default defineComponent({
             positionStyle = { left: `${dayIndex * dayWidthPercent}%`, right: 'auto' };
           }
 
-          // Z-INDEX LOGIC (Multi-Day):
-          // Base: 100 (Much lower than single-day).
-          // Result: These always stay behind single-day events.
           const zIndex = isSelected ? 1000000 : 100;
 
           item.style = {
@@ -739,7 +743,6 @@ export default defineComponent({
     const handleGridMouseMove = (e: MouseEvent) => {
       if (!config.value.editable) return;
 
-      // CONFLICT FIX: If hovering over an existing item, DO NOT show ghost event
       const target = e.target as HTMLElement;
       if (target.closest('.calendar-item-wrapper')) {
         ghostEvent.value = null;
@@ -778,7 +781,8 @@ export default defineComponent({
       const startTotalMin = config.value.startHour * 60 + snappedMin;
 
       // Date calc
-      const dateBase = monthDays.value[dayIdx].date;
+      // TS FIX: Added ! below
+      const dateBase = monthDays.value[dayIdx]!.date;
       const startDt = new Date(dateBase);
       startDt.setHours(Math.floor(startTotalMin / 60), startTotalMin % 60);
 
