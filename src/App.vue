@@ -55,11 +55,16 @@ const calendarGridOptions = {
     new Date('2026-01-02'),
   ],
   autoCreateEvent: true,
-  headerFormat: 'dual'
+  headerFormat: 'dual',
+  canCreate:true,
 }
 watch(() => gridItems.value, () => {
   console.log('items updated')
 }, { deep: true, immediate: true })
+
+const logNewEvent = (newItem:any)=>{
+  console.log(newItem)
+}
 </script>
 
 <template>
@@ -78,7 +83,7 @@ watch(() => gridItems.value, () => {
       <div class="card grid-card">
         <h2>Calendar Grid</h2>
         <div class="grid-wrapper">
-          <CalendarGrid v-model="gridItems" :options="calendarGridOptions">
+          <CalendarGrid @event-create="logNewEvent" v-model="gridItems" :options="calendarGridOptions">
             <template #item="{ item }">
               <div class="item">
                 <strong>{{ item.title }}</strong>

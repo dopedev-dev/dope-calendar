@@ -71,9 +71,8 @@
 
           <div class="content">
             <transition name="fade">
-              <div
-                v-if="ghostEvent && selectedItemIndex === null && !isDragging && options.autoCreateEvent && config.editable"
-                class="ghost-event" :style="ghostEventStyle" @click.stop="triggerAddEvent">
+              <div v-if="ghostEvent && selectedItemIndex === null && !isDragging && options.canCreate && config.editable" class="ghost-event"
+                :style="ghostEventStyle" @click.stop="triggerAddEvent">
                 <slot name="add-event-button" :hover-data="ghostEvent">
                   <div class="ghost-plus-icon">
                     <div style="height:32px">+</div>
@@ -149,7 +148,8 @@ interface CalendarOptions {
   ghostClass?: string;          // NEW: Custom class for ghost element
   ghostStyle?: Record<string, any>; // NEW: Custom style object
   newEventDefaults?: Record<string, any>; // NEW: Default props for new items
-  headerFormat?: 'default' | 'dual'
+  headerFormat?: 'default' | 'dual';
+  canCreate: boolean;
 }
 
 export default defineComponent({
@@ -194,7 +194,8 @@ export default defineComponent({
         format: '24h',
         holidays: [],
         autoCreateEvent: true,
-        headerFormat: 'default' // Default behavior
+        headerFormat: 'default', // Default behavior
+        canCreate:true,
       }
       return { ...defaults, ...props.options }
     })
