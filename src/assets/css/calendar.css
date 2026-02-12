@@ -1,3 +1,4 @@
+/* src/assets/css/calendar.css */
 
 /* --- Calendar Grid Variables --- */
 .dope-calendar-grid {
@@ -23,60 +24,153 @@
   --dc-selected-shadow-color: rgba(54, 162, 235, 0.5);
   --dc-selected-outline-color: rgba(54, 162, 235, 0.8);
   
-  /* You can even make the width/offset variables if you want extreme customization */
+  /* --- NEW VARIABLES: Header Borders --- */
+  --dc-header-border-color: #e5e7eb;
+  --dc-header-border-width: 1px;
+
+  /* --- NEW VARIABLES: Current Time Indicator --- */
+  --dc-now-indicator-color: #ef4444; /* Red */
+  --dc-now-indicator-line-width: 2px;
+  
+  /* --- NEW VARIABLES: Ghost Event --- */
+  --dc-ghost-bg: rgba(59, 130, 246, 0.2);
+  --dc-ghost-border: 2px dashed rgba(59, 130, 246, 0.6);
+  --dc-ghost-text: #1d4ed8;
+
   --dc-selected-shadow: 0 0 0 3px var(--dc-selected-shadow-color), 0 4px 12px rgba(0, 0, 0, 0.15);
   --dc-selected-outline: 2px solid var(--dc-selected-outline-color);
   --dc-selected-offset: 2px;
+
+  
+  /* Ghost Event (Hover/Click to Add) */
+  --dc-ghost-bg: rgba(59, 130, 246, 0.2);
+  --dc-ghost-border: 2px dashed rgba(59, 130, 246, 0.6);
+  --dc-ghost-text: #1d4ed8;
+}
+
+/* Dark Mode Overrides */
+[data-theme='dark'] .dope-calendar-grid {
+  --dc-bg: #111827;
+  --dc-border-color: #374151;
+  --dc-day-number-color: #f3f4f6;
+  --dc-day-name-color: #9ca3af;
+  --dc-weekend-day-color: #f87171;
+  --dc-current-day-color: #60a5fa;
+  --dc-header-border-color: #374151;
+  --dc-now-indicator-color: #f87171;
+  --dc-ghost-bg: rgba(96, 165, 250, 0.2);
+  --dc-ghost-border: 2px dashed rgba(96, 165, 250, 0.6);
+  --dc-ghost-text: #bfdbfe;
 }
 
 .selected {
   box-shadow: var(--dc-selected-shadow);
   outline: var(--dc-selected-outline);
   outline-offset: var(--dc-selected-offset);
-  
-  /* Optional: Add a transition for smoother effect */
   transition: all 0.2s ease; 
 }
 
-/* --- Date Picker Variables --- */
+/* Header Cell Borders logic */
+.day-cell {
+  position: relative;
+}
+
+/* LTR: Border on right */
+[dir="ltr"] .calendar-header .day-cell:not(:last-child) {
+  border-right: var(--dc-header-border-width) solid var(--dc-header-border-color);
+}
+
+/* RTL: Border on left */
+[dir="rtl"] .calendar-header .day-cell:not(:last-child) {
+  border-left: var(--dc-header-border-width) solid var(--dc-header-border-color);
+}
+
+/* Current Time Indicator Styles */
+.current-time-line {
+  position: absolute;
+  width: 100%;
+  pointer-events: none;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+}
+
+.current-time-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: var(--dc-now-indicator-color);
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 21;
+}
+
+[dir="ltr"] .current-time-dot { left: -6px; }
+[dir="rtl"] .current-time-dot { right: -6px; }
+
+.current-time-bar {
+  width: 100%;
+  height: var(--dc-now-indicator-line-width);
+  background-color: var(--dc-now-indicator-color);
+}
+
+/* Ghost Event Styles */
+.ghost-event {
+  position: absolute;
+  z-index: 30;
+  border-radius: 4px;
+  background-color: var(--dc-ghost-bg);
+  border: var(--dc-ghost-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dc-ghost-text);
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: auto; /* Allow clicking */
+  cursor: pointer;
+}
+
+/* Animations */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+/* --- Date Picker Variables (Keep existing) --- */
 .dope-date-picker {
-  /* Dimensions */
   --dp-width: 328px;
   --dp-cell-size: 40px;
   --dp-padding: 16px;
-  --dp-radius: 0px; /* No Border Radius */
+  --dp-radius: 0px;
   --dp-header-height: 48px;
-
-  /* Typography */
-  --dp-font-family:
-    system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    'Noto Sans', sans-serif;
+  --dp-font-family: system-ui, -apple-system, sans-serif;
   --dp-font-size: 0.875rem;
   --dp-weight-bold: 700;
   --dp-weight-medium: 500;
-
-  /* Colors */
   --dp-bg: #ffffff;
   --dp-text: #1f2937;
   --dp-text-muted: #9ca3af;
   --dp-border: #e5e7eb;
   --dp-hover-bg: #f3f4f6;
-
   --dp-primary: #3b82f6;
   --dp-primary-text: #ffffff;
-
   --dp-holiday-text: #ef4444;
   --dp-disabled-text: #d1d5db;
   --dp-disabled-bg: transparent;
-
   --dp-scroll-width: 6px;
   --dp-scroll-track-bg: transparent;
   --dp-scroll-thumb-bg: #d1d5db;
   --dp-scroll-thumb-hover: #9ca3af;
   --dp-scroll-border-radius: 10px;
-
-  /* Misc */
-  --dp-shadow: none; /* No Shadow */
+  --dp-shadow: none;
   --dp-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 

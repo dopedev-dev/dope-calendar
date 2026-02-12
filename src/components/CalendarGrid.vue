@@ -6,6 +6,7 @@
       <div ref="calendarHeader" @scroll="handleHeaderScroll" class="calendar-header hide-scrollbar">
         <div v-for="(day, index) in monthDays" :key="index" :class="{
           'day-cell': true,
+          'calendar-header-cell': true,
           'weekend-day': isWeekend(day.weekDay) || isHoliday(day.date),
           'current-day': isCurrentDay(day.date)
         }">
@@ -43,7 +44,9 @@
       <div class="calendar-body hide-scrollbar" @scroll="handleContentScroll" @click="handleCalendarClick"
         ref="calendarContent" :style="{ height: calendarBodyHeight }">
 
-        <div class="grid-content" :style="{ minWidth: calendarBodyWidth, width: '100%' }">
+        <div class="grid-content" :style="{ minWidth: calendarBodyWidth, width: '100%' }"
+          @mousemove="handleGridMouseMove" @mouseleave="handleGridMouseLeave">
+
           <div class="horizontal-grid">
             <div v-for="(hour, index) in dayHoursList" :key="index">
               <div class="grid-line-h"></div>
@@ -54,7 +57,19 @@
               <div :class="{ 'grid-line-v': day !== 1 }"></div>
             </div>
           </div>
+
           <div class="content">
+            <transition name="fade">
+              <div v-if="ghostEvent && selectedItemIndex === null && !isDragging && config.editable"
+                :key="ghostEvent.startDt.getTime()" :class="['ghost-event', config.ghostClass]" :style="ghostEventStyle"
+                @click.stop="triggerAddEvent">
+
+                <slot name="add-event-button" :hover-data="ghostEvent" :trigger="triggerAddEvent">
+                  <div class="ghost-plus-icon">+</div>
+                </slot>
+              </div>
+            </transition>
+
             <div v-for="(item, index) in processedItems" :key="item.id" class="calendar-item-wrapper" :class="{
               selected: selectedItemIndex === index,
               dragging: draggingItem?.originalIndex === index,
@@ -87,6 +102,14 @@
                   @mousedown.stop="handleResizeStart($event, item, 'bottom')"></div>
               </div>
             </div>
+
+            <div v-if="shouldShowCurrentTime" class="current-time-line" :style="{ top: currentTimeTop }">
+              <slot name="current-time">
+                <div class="current-time-dot"></div>
+                <div class="current-time-bar"></div>
+              </slot>
+            </div>
+
           </div>
         </div>
       </div>
@@ -95,7 +118,7 @@
 </template>
 
 <script lang="ts">
-import { type PropType, ref, defineComponent, watch, onMounted, computed, nextTick, type StyleValue } from 'vue'
+import { type PropType, ref, defineComponent, watch, onMounted, onUnmounted, computed, nextTick, type StyleValue } from 'vue'
 import * as jalaali from 'jalaali-js'
 import { useDragToScroll } from '@/composables/useDragToScroll'
 
@@ -115,6 +138,10 @@ interface CalendarOptions {
   lang?: 'en' | 'fa'
   format?: 'ampm' | '24h' | 'keys'
   holidays?: Date[]
+  autoCreateEvent?: boolean // New option
+  ghostClass?: string;          // NEW: Custom class for ghost element
+  ghostStyle?: Record<string, any>; // NEW: Custom style object
+  newEventDefaults?: Record<string, any>; // NEW: Default props for new items
 }
 
 export default defineComponent({
@@ -129,7 +156,7 @@ export default defineComponent({
       default: () => [],
     },
   },
-  emits: ['update:modelValue'],
+  emits: ['update:modelValue', 'event-create'],
   setup(props, { emit }) {
     const calendar = ref<HTMLElement | null>(null)
     const calendarContent = ref<HTMLElement | null>(null)
@@ -137,6 +164,7 @@ export default defineComponent({
     const contentContainer = ref<HTMLElement | null>(null)
     const isZooming = ref(false)
     const silentUpdateIndex = ref<number | null>(null)
+    const isDragging = computed(() => draggingItem.value !== null);
 
     const sidebarWidth = ref(50)
 
@@ -156,7 +184,8 @@ export default defineComponent({
         endHour: 24,
         lang: 'fa',
         format: '24h',
-        holidays: []
+        holidays: [],
+        autoCreateEvent: true // Default behavior
       }
       return { ...defaults, ...props.options }
     })
@@ -411,220 +440,143 @@ export default defineComponent({
       return zoomAmount.value * dayCellHeight.value / 2
     })
 
-    let startY = 0
-    const dragFromUpperHalf = ref(true)
-
-    let animationFrameId: number | null = null
-
-    const handleZoomStart = (event: MouseEvent | TouchEvent) => {
-      if (!config.value.zoom) return
-      isZooming.value = true
-      startY = 'touches' in event ? (event.touches[0]?.clientY || 0) : event.clientY
-
-      const targetElement = event.currentTarget as HTMLElement
-      const rect = targetElement.getBoundingClientRect()
-      const clickY = 'touches' in event ? (event.touches[0]?.clientY || 0) : event.clientY
-      const middleY = rect.top + rect.height / 2
-      dragFromUpperHalf.value = clickY < middleY
-
-      const allItems = document.querySelectorAll('.calendar-item-wrapper')
-      allItems.forEach(el => el.classList.add('no-transition'))
-
-      document.addEventListener('mousemove', handleZoomMove)
-      document.addEventListener('touchmove', handleZoomMove, { passive: false })
-      document.addEventListener('mouseup', handleZoomEnd)
-      document.addEventListener('touchend', handleZoomEnd)
-      document.addEventListener('mouseleave', handleZoomEnd)
-      document.addEventListener('touchcancel', handleZoomEnd)
-    }
-
-    const handleZoomMove = (event: MouseEvent | TouchEvent) => {
-      if (!isZooming.value) return
-      event.preventDefault()
-
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId)
-      }
-
-      animationFrameId = requestAnimationFrame(() => {
-        const currentY = 'touches' in event ? (event.touches[0]?.clientY || 0) : event.clientY
-        const deltaY = currentY - startY
-
-        const zoomDirection = dragFromUpperHalf.value ? -1 : 1
-        const newZoomAmount = zoomAmount.value + (deltaY * zoomDirection) / 50
-        zoomAmount.value = Math.max(
-          minZoomAmount.value,
-          Math.min(newZoomAmount, maxZoomAmount.value)
-        )
-        startY = currentY
-      })
-    }
-
-    const handleZoomEnd = () => {
-      if (!isZooming.value) return
-      isZooming.value = false
-
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId)
-        animationFrameId = null
-      }
-
-      const allItems = document.querySelectorAll('.calendar-item-wrapper')
-      allItems.forEach(el => el.classList.remove('no-transition'))
-
-      document.removeEventListener('mousemove', handleZoomMove)
-      document.removeEventListener('touchmove', handleZoomMove)
-      document.removeEventListener('mouseup', handleZoomEnd)
-      document.removeEventListener('touchend', handleZoomEnd)
-      document.removeEventListener('mouseleave', handleZoomEnd)
-      document.removeEventListener('touchcancel', handleZoomEnd)
-    }
-
-    const windowWidth = ref(window.innerWidth);
-
-    const updateDayCellWidth = () => {
-      if (!calendarHeader.value) return;
-
-      const firstDayCell = calendarHeader.value?.querySelector('.day-cell') as HTMLElement;
-      if (firstDayCell) {
-        dayCellWidth.value = firstDayCell.offsetWidth;
-      } else {
-        dayCellWidth.value = 56;
-      }
-    };
-
-    onMounted(() => {
-      const handleResize = () => {
-        windowWidth.value = window.innerWidth;
-        updateDayCellWidth();
-      };
-
-      window.addEventListener('resize', handleResize);
-      updateDayCellWidth();
-
-      if (calendar.value && contentContainer.value) {
-        const style = getComputedStyle(calendar.value)
-        const widthStr = style.getPropertyValue('--dc-day-container-width').trim()
-        const heightStr = style.getPropertyValue('--dc-day-cell-height').trim()
-
-        if (widthStr && widthStr.includes('px')) {
-          const parsed = parseInt(widthStr, 10)
-          if (!isNaN(parsed) && parsed > 0) {
-            if (config.value.mode !== 'week' && config.value.mode !== 'month') {
-              dayCellWidth.value = parsed
-            }
-          }
-        }
-
-        if (heightStr) {
-          const parsedHeight = parseInt(heightStr, 10)
-          if (!isNaN(parsedHeight) && parsedHeight > 0) {
-            dayCellHeight.value = parsedHeight
-          }
-        }
-
-        const containerHeight = contentContainer.value.clientHeight
-        const naturalGridHeight = dayHoursList.value.length * dayCellHeight.value
-        let requiredZoomY = 1
-        if (naturalGridHeight > 0 && containerHeight > naturalGridHeight) {
-          requiredZoomY = containerHeight / naturalGridHeight
-        }
-
-        const initialZoom = Math.max(1, requiredZoomY)
-
-        if (initialZoom > 1) {
-          zoomAmount.value = initialZoom
-          minZoomAmount.value = initialZoom
-          maxZoomAmount.value = initialZoom * config.value.maxZoom
-        } else {
-          minZoomAmount.value = 1
-          maxZoomAmount.value = config.value.maxZoom
-        }
-      }
-    })
-
-    watch(monthDays, () => {
-      nextTick(updateDayCellWidth);
-    });
-
+    // --- PROCESSED ITEMS (Merged Google Style + Date Logic) ---
     const processedItems = computed(() => {
       const dayWidthPercent = 100 / monthDays.value.length
       const totalHours = config.value.endHour - config.value.startHour
       const contentHeight = dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
 
-      return props.modelValue
+      // GET DRAGGING INDEX
+      const draggingIndex = draggingItem.value ? draggingItem.value.originalIndex : -1
+
+      // 1. Map items
+      const rawItems = props.modelValue
         .map((item, index) => {
           const startDt = new Date(item.start)
           const endDt = new Date(item.end)
 
-          // Robust Day Matching (Use Time/Date equality, NOT day number)
-          const startDayIndex = monthDays.value.findIndex((day) => {
-            return isSameDay(day.date, startDt)
-          })
+          const startDayIndex = monthDays.value.findIndex((day) => isSameDay(day.date, startDt))
+          if (startDayIndex === -1) return null
 
-          if (startDayIndex === -1) {
-            return null
-          }
-
-          // Calculate Visual Duration based on Time of Day only
           const startMinutes = startDt.getHours() * 60 + startDt.getMinutes();
-          const endMinutes = endDt.getHours() * 60 + endDt.getMinutes();
+          let endMinutes = endDt.getHours() * 60 + endDt.getMinutes();
 
           let durationMinutes = endMinutes - startMinutes;
-          // Handle wrap around
-          if (durationMinutes < 0) {
-            durationMinutes += 24 * 60;
-          }
+          if (durationMinutes < 0) durationMinutes += 24 * 60;
+          if (durationMinutes < 15) durationMinutes = 15;
 
           const isSameDayVal = isSameDay(startDt, endDt)
           let daySpan = 1
           if (!isSameDayVal) {
-            // calc diff in days
             daySpan = Math.floor(Math.abs(diffDays(endDt, startDt))) + 1
           }
 
-          // itemStartOffset is time since start hour
           const dayStartMin = config.value.startHour * 60
           const itemStartOffset = startMinutes - dayStartMin
 
           const topOffset = (itemStartOffset / (totalHours * 60)) * contentHeight
           const height = (durationMinutes / (totalHours * 60)) * contentHeight
 
-          const width = daySpan * dayWidthPercent
-
-          const positionStyle = config.value.dir === 'rtl'
-            ? { right: `${startDayIndex * dayWidthPercent}%`, left: 'auto' }
-            : { left: `${startDayIndex * dayWidthPercent}%`, right: 'auto' }
-
-          const zIndex = Math.max(1, 100000 - Math.floor(durationMinutes))
-
-          const style = {
-            top: `calc(${topPadding.value}px + ${topOffset}px)`,
-            ...positionStyle,
-            height: `${height}px`,
-            width: `${width}%`,
-            position: 'absolute',
-            zIndex
-          }
-
           return {
             ...item,
             id: `item-${index}`,
-            style,
-            startDayIndex,
-            daySpan,
-            itemDuration: durationMinutes,
-            originalIndex: index
+            originalIndex: index,
+            _startDayIndex: startDayIndex,
+            _startMinutes: startMinutes,
+            _endMinutes: startMinutes + durationMinutes,
+            _topOffset: topOffset,
+            _height: height,
+            daySpan
           }
         })
-        .filter((item) => item !== null)
+        .filter((item) => item !== null) as any[];
+
+      // 2. Group by Day
+      const itemsByDay: Record<number, any[]> = {};
+      rawItems.forEach(item => {
+        // FILTER: If this is the dragged item, DO NOT include in packing group
+        if (config.value.editable && item.originalIndex === draggingIndex) return;
+
+        if (!itemsByDay[item._startDayIndex]) itemsByDay[item._startDayIndex] = [];
+        itemsByDay[item._startDayIndex].push(item);
+      });
+
+      const finalItems: any[] = [];
+
+      // 3. Add Dragged Item Separately (Hidden)
+      // We keep it in DOM but hide it so the ghost is the only visual representation
+      if (draggingIndex !== -1) {
+        const dragged = rawItems.find(i => i.originalIndex === draggingIndex);
+        if (dragged) {
+          dragged.style = { display: 'none' };
+          finalItems.push(dragged);
+        }
+      }
+
+      // 4. Apply Packing Algorithm (To others only)
+      Object.keys(itemsByDay).forEach(key => {
+        const dayIndex = parseInt(key);
+        const dayItems = itemsByDay[dayIndex];
+
+        dayItems.sort((a, b) => {
+          if (a._startMinutes === b._startMinutes) return b._endMinutes - a._endMinutes;
+          return a._startMinutes - b._startMinutes;
+        });
+
+        const columns: any[][] = [];
+        dayItems.forEach(item => {
+          let placed = false;
+          for (let i = 0; i < columns.length; i++) {
+            const col = columns[i];
+            const last = col[col.length - 1];
+            if (item._startMinutes >= last._endMinutes) {
+              col.push(item);
+              item._colIndex = i;
+              placed = true;
+              break;
+            }
+          }
+          if (!placed) {
+            columns.push([item]);
+            item._colIndex = columns.length - 1;
+          }
+        });
+
+        const numCols = columns.length;
+        dayItems.forEach(item => {
+          const colWidthPercent = dayWidthPercent / numCols;
+          const offsetInDay = item._colIndex * colWidthPercent;
+
+          let positionStyle = {};
+          if (config.value.dir === 'rtl') {
+            positionStyle = { right: `${(dayIndex * dayWidthPercent) + offsetInDay}%`, left: 'auto' };
+          } else {
+            positionStyle = { left: `${(dayIndex * dayWidthPercent) + offsetInDay}%`, right: 'auto' };
+          }
+
+          const zIndex = Math.max(100000, 100000 - Math.floor(item.itemDuration || 0)) + item._colIndex;
+
+          item.style = {
+            top: `calc(${topPadding.value}px + ${item._topOffset}px)`,
+            ...positionStyle,
+            height: `${item._height}px`,
+            width: `${item.daySpan > 1 ? item.daySpan * dayWidthPercent : colWidthPercent}%`,
+            position: 'absolute',
+            zIndex: zIndex,
+            boxSizing: 'border-box',
+            border: '1px solid white'
+          };
+        });
+        finalItems.push(...dayItems);
+      });
+
+      return finalItems;
     })
 
     const processedHolidays = computed(() => {
       const isJalaali = config.value.calendar === 'jalaali'
 
       const keys = config.value.holidays.map((d: any) => {
-        // 1. HANDLE JALAALI STRINGS (e.g., "1404-10-04" or "1404/10/04")
         if (isJalaali && typeof d === 'string') {
           const normalized = d.replace(/\//g, '-')
           if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(normalized)) {
@@ -633,8 +585,6 @@ export default defineComponent({
             return `${g.gy}-${g.gm - 1}-${g.gd}`
           }
         }
-
-        // 2. HANDLE STANDARD DATE OBJECTS
         const date = new Date(d)
         if (isNaN(date.getTime())) return null
         return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
@@ -655,6 +605,177 @@ export default defineComponent({
       return isSameDay(date, today)
     }
 
+    // --- NEW: Current Time Logic ---
+    const now = ref(new Date());
+    let timeInterval: any;
+
+    const shouldShowCurrentTime = computed(() => {
+      const h = now.value.getHours();
+      return h >= config.value.startHour && h <= config.value.endHour;
+    });
+
+    const currentTimeTop = computed(() => {
+      const totalHours = config.value.endHour - config.value.startHour
+      const contentHeight = dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value
+
+      const currentMin = now.value.getHours() * 60 + now.value.getMinutes()
+      const startMin = config.value.startHour * 60
+      const offset = currentMin - startMin
+
+      const px = (offset / (totalHours * 60)) * contentHeight
+      return `calc(${topPadding.value}px + ${px}px)`
+    });
+
+    const scrollToFirstEvent = () => {
+      if (!contentContainer.value) return;
+      let targetY = 0;
+
+      // Find earliest time
+      let minH = 24;
+      let hasEvent = false;
+
+      if (props.modelValue.length > 0) {
+        props.modelValue.forEach(i => {
+          const h = new Date(i.start).getHours();
+          if (h < minH) minH = h;
+        });
+        hasEvent = true;
+      }
+
+      const startH = config.value.startHour;
+      const totalH = config.value.endHour - startH;
+      const scrollH = dayHoursList.value.length * zoomAmount.value * dayCellHeight.value;
+
+      let targetHour = hasEvent ? Math.max(startH, minH - 1) : 8; // Default 8am if empty
+      if (targetHour < startH) targetHour = startH;
+
+      targetY = ((targetHour - startH) / totalH) * scrollH;
+
+      contentContainer.value.scrollTo({ top: targetY, behavior: 'smooth' });
+    };
+
+    // --- NEW: Ghost Event Logic ---
+    const ghostEvent = ref<any>(null);
+
+    const handleGridMouseMove = (e: MouseEvent) => {
+      if (!config.value.editable) return;
+
+      const target = e.target as HTMLElement;
+      if (target.closest('.calendar-item-wrapper')) {
+        ghostEvent.value = null;
+        return;
+      }
+
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      const dayW = rect.width / monthDays.value.length;
+      let dayIdx = Math.floor(x / dayW);
+      if (config.value.dir === 'rtl') {
+        dayIdx = (monthDays.value.length - 1) - dayIdx;
+      }
+
+      if (dayIdx < 0 || dayIdx >= monthDays.value.length) {
+        ghostEvent.value = null;
+        return;
+      }
+
+      const effectiveY = y - topPadding.value;
+      const contentHeight = dayHoursList.value.length * zoomAmount.value * dayCellHeight.value - 2 * topPadding.value;
+
+      const percent = Math.max(0, Math.min(1, effectiveY / contentHeight));
+      const totalMin = (config.value.endHour - config.value.startHour) * 60;
+      const rawMin = percent * totalMin;
+
+      const snap = config.value.minTime || 30; // Default to 30 if undefined
+      const snappedMin = Math.floor(rawMin / snap) * snap;
+
+      const startTotalMin = config.value.startHour * 60 + snappedMin;
+
+      // Date calc
+      const dateBase = monthDays.value[dayIdx].date;
+      const startDt = new Date(dateBase);
+      startDt.setHours(Math.floor(startTotalMin / 60), startTotalMin % 60, 0, 0);
+
+      const endDt = new Date(startDt);
+      endDt.setMinutes(endDt.getMinutes() + (config.value.minTime || 60)); // Default duration
+
+      // STABILITY CHECK: If slot hasn't changed, DO NOT update.
+      // This prevents DOM thrashing which kills the click event.
+      if (ghostEvent.value &&
+        ghostEvent.value.dayIdx === dayIdx &&
+        ghostEvent.value.startDt.getTime() === startDt.getTime()) {
+        return;
+      }
+
+      // Visual
+      const topPx = (snappedMin / totalMin) * contentHeight + topPadding.value;
+      const heightPx = ((config.value.minTime || 60) / totalMin) * contentHeight;
+
+      ghostEvent.value = {
+        dayIdx,
+        startDt,
+        endDt,
+        top: topPx,
+        height: heightPx
+      };
+    };
+
+    const handleGridMouseLeave = () => { ghostEvent.value = null; };
+
+    const ghostEventStyle = computed(() => {
+      if (!ghostEvent.value) return {};
+      const dayW = 100 / monthDays.value.length;
+
+      // Base positioning styles
+      const base = {
+        top: `${ghostEvent.value.top}px`,
+        height: `${ghostEvent.value.height}px`,
+        width: `${dayW}%`,
+        position: 'absolute',
+        zIndex: 30
+      } as any;
+
+      // RTL/LTR Logic
+      if (config.value.dir === 'rtl') {
+        base.right = `${ghostEvent.value.dayIdx * dayW}%`;
+        base.left = 'auto';
+      } else {
+        base.left = `${ghostEvent.value.dayIdx * dayW}%`;
+        base.right = 'auto';
+      }
+
+      // Merge with user config styles
+      return { ...base, ...(config.value.ghostStyle || {}) };
+    });
+
+    const triggerAddEvent = () => {
+      if (!ghostEvent.value) return;
+
+      const newItem = {
+        title: 'New Event',
+        start: new Date(ghostEvent.value.startDt),
+        end: new Date(ghostEvent.value.endDt),
+        style: { backgroundColor: 'var(--dc-current-day-color)' },
+        ...config.value.newEventDefaults
+      };
+
+      // 1. Emit simple event
+      emit('event-create', newItem);
+
+      // 2. Auto-add to internal model if enabled
+      if (config.value.autoCreateEvent) {
+        // Create a FRESH array reference to trigger watchers
+        const newList = [...props.modelValue, newItem];
+        emit('update:modelValue', newList);
+      }
+
+      // 3. Clear ghost event immediately
+      ghostEvent.value = null;
+    };
+
+    // --- EXISTING LOGIC (Drag, Resize) ---
     const resizingItem = ref<{ item: any; handle: 'top' | 'bottom'; originalIndex: number } | null>(null)
     const initialY = ref(0)
     const initialStart = ref<Date | null>(null)
@@ -855,6 +976,7 @@ export default defineComponent({
       const trueIndex = item.originalIndex
       const originalItem = props.modelValue[trueIndex]
 
+
       draggedElement.value = event.currentTarget as HTMLElement
 
       const clientX = 'touches' in event ? (event.touches[0]?.clientX || 0) : event.clientX
@@ -968,6 +1090,10 @@ export default defineComponent({
           const containerRect = calendarContent.value.getBoundingClientRect()
           const headerChildren = Array.from(calendarHeader.value.children) as HTMLElement[]
 
+          // IMPORTANT FIX: Get current scroll top to subtract from calculation
+          // Since calendarContent (calendar-body) is the scrollable element
+          const currentContainerScroll = calendarContent.value.scrollTop;
+
           const dayStartOf = startOfDay(adjustedStart)
           dayStartOf.setHours(config.value.startHour, 0, 0, 0)
 
@@ -987,7 +1113,6 @@ export default defineComponent({
 
           if (headerChildren[visualStartIndex]) {
             leftPos = headerChildren[visualStartIndex].getBoundingClientRect().left;
-            // FIX: Sum actual column widths from the header to prevent shrinking
             for (let i = 0; i < daySpan; i++) {
               const currentHeader = headerChildren[visualStartIndex + i];
               targetWidth += currentHeader ? currentHeader.getBoundingClientRect().width : headerChildren[visualStartIndex].getBoundingClientRect().width;
@@ -997,7 +1122,13 @@ export default defineComponent({
             targetWidth = dayCellWidth.value * daySpan;
           }
 
-          targetRect = { top: containerRect.top + topPadding.value + topOffsetPx, left: leftPos, width: targetWidth, height: heightPx }
+          // FIX: Subtract currentContainerScroll
+          targetRect = {
+            top: containerRect.top + topPadding.value + topOffsetPx - currentContainerScroll,
+            left: leftPos,
+            width: targetWidth,
+            height: heightPx
+          }
         }
       }
 
@@ -1163,6 +1294,150 @@ export default defineComponent({
         isSameDay(new Date(config.value.startDate), new Date(config.value.endDate))
     })
 
+    // --- Lifecycle (Mount, Auto Scroll, Clock) ---
+    let animationFrameId: number | null = null
+
+    const handleZoomStart = (event: MouseEvent | TouchEvent) => {
+      if (!config.value.zoom) return
+      isZooming.value = true
+      startY = 'touches' in event ? (event.touches[0]?.clientY || 0) : event.clientY
+
+      const targetElement = event.currentTarget as HTMLElement
+      const rect = targetElement.getBoundingClientRect()
+      const clickY = 'touches' in event ? (event.touches[0]?.clientY || 0) : event.clientY
+      const middleY = rect.top + rect.height / 2
+      dragFromUpperHalf.value = clickY < middleY
+
+      const allItems = document.querySelectorAll('.calendar-item-wrapper')
+      allItems.forEach(el => el.classList.add('no-transition'))
+
+      document.addEventListener('mousemove', handleZoomMove)
+      document.addEventListener('touchmove', handleZoomMove, { passive: false })
+      document.addEventListener('mouseup', handleZoomEnd)
+      document.addEventListener('touchend', handleZoomEnd)
+      document.addEventListener('mouseleave', handleZoomEnd)
+      document.addEventListener('touchcancel', handleZoomEnd)
+    }
+
+    const handleZoomMove = (event: MouseEvent | TouchEvent) => {
+      if (!isZooming.value) return
+      event.preventDefault()
+
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId)
+      }
+
+      animationFrameId = requestAnimationFrame(() => {
+        const currentY = 'touches' in event ? (event.touches[0]?.clientY || 0) : event.clientY
+        const deltaY = currentY - startY
+
+        const zoomDirection = dragFromUpperHalf.value ? -1 : 1
+        const newZoomAmount = zoomAmount.value + (deltaY * zoomDirection) / 50
+        zoomAmount.value = Math.max(
+          minZoomAmount.value,
+          Math.min(newZoomAmount, maxZoomAmount.value)
+        )
+        startY = currentY
+      })
+    }
+
+    const handleZoomEnd = () => {
+      if (!isZooming.value) return
+      isZooming.value = false
+
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId)
+        animationFrameId = null
+      }
+
+      const allItems = document.querySelectorAll('.calendar-item-wrapper')
+      allItems.forEach(el => el.classList.remove('no-transition'))
+
+      document.removeEventListener('mousemove', handleZoomMove)
+      document.removeEventListener('touchmove', handleZoomMove)
+      document.removeEventListener('mouseup', handleZoomEnd)
+      document.removeEventListener('touchend', handleZoomEnd)
+      document.removeEventListener('mouseleave', handleZoomEnd)
+      document.removeEventListener('touchcancel', handleZoomEnd)
+    }
+
+    const windowWidth = ref(window.innerWidth);
+
+    const updateDayCellWidth = () => {
+      if (!calendarHeader.value) return;
+
+      const firstDayCell = calendarHeader.value?.querySelector('.day-cell') as HTMLElement;
+      if (firstDayCell) {
+        dayCellWidth.value = firstDayCell.offsetWidth;
+      } else {
+        dayCellWidth.value = 56;
+      }
+    };
+
+    onMounted(() => {
+      const handleResize = () => {
+        windowWidth.value = window.innerWidth;
+        updateDayCellWidth();
+      };
+
+      window.addEventListener('resize', handleResize);
+      updateDayCellWidth();
+
+      if (calendar.value && contentContainer.value) {
+        const style = getComputedStyle(calendar.value)
+        const widthStr = style.getPropertyValue('--dc-day-container-width').trim()
+        const heightStr = style.getPropertyValue('--dc-day-cell-height').trim()
+
+        if (widthStr && widthStr.includes('px')) {
+          const parsed = parseInt(widthStr, 10)
+          if (!isNaN(parsed) && parsed > 0) {
+            if (config.value.mode !== 'week' && config.value.mode !== 'month') {
+              dayCellWidth.value = parsed
+            }
+          }
+        }
+
+        if (heightStr) {
+          const parsedHeight = parseInt(heightStr, 10)
+          if (!isNaN(parsedHeight) && parsedHeight > 0) {
+            dayCellHeight.value = parsedHeight
+          }
+        }
+
+        const containerHeight = contentContainer.value.clientHeight
+        const naturalGridHeight = dayHoursList.value.length * dayCellHeight.value
+        let requiredZoomY = 1
+        if (naturalGridHeight > 0 && containerHeight > naturalGridHeight) {
+          requiredZoomY = containerHeight / naturalGridHeight
+        }
+
+        const initialZoom = Math.max(1, requiredZoomY)
+
+        if (initialZoom > 1) {
+          zoomAmount.value = initialZoom
+          minZoomAmount.value = initialZoom
+          maxZoomAmount.value = initialZoom * config.value.maxZoom
+        } else {
+          minZoomAmount.value = 1
+          maxZoomAmount.value = config.value.maxZoom
+        }
+      }
+
+      // Auto-Scroll Feature
+      setTimeout(() => scrollToFirstEvent(), 100);
+
+      // Clock Feature
+      timeInterval = setInterval(() => { now.value = new Date() }, 60000);
+    })
+
+    onUnmounted(() => {
+      clearInterval(timeInterval);
+    });
+
+    watch(monthDays, () => {
+      nextTick(updateDayCellWidth);
+    });
+
     return {
       config,
       isCurrentDay,
@@ -1201,21 +1476,106 @@ export default defineComponent({
       getItemStyle,
       dayCellWidth,
       windowWidth,
-      sidebarWidth
+      sidebarWidth,
+
+      // NEW RETURNS
+      shouldShowCurrentTime,
+      currentTimeTop,
+      ghostEvent,
+      ghostEventStyle,
+      handleGridMouseMove,
+      handleGridMouseLeave,
+      triggerAddEvent,
+      isDragging,
     }
   },
 })
 </script>
+
 <style scoped>
 @import '@/assets/css/calendar.css';
+
+/* --- NEW FEATURES STYLES --- */
+
+/* Ghost Event */
+.ghost-event {
+  pointer-events: auto;
+  cursor: pointer;
+  background-color: var(--dc-ghost-bg, rgba(59, 130, 246, 0.2));
+  border: var(--dc-ghost-border, 2px dashed #3b82f6);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ghost-plus-icon {
+  font-size: 20px;
+  font-weight: bold;
+  color: var(--dc-ghost-text, #2563eb);
+  background: rgba(255, 255, 255, 0.6);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+/* Current Time Indicator */
+.current-time-line {
+  position: absolute;
+  width: 100%;
+  pointer-events: none;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+}
+
+.current-time-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: var(--dc-now-indicator-color, #ef4444);
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 21;
+}
+
+[dir="ltr"] .current-time-dot {
+  left: -6px;
+}
+
+[dir="rtl"] .current-time-dot {
+  right: -6px;
+}
+
+.current-time-bar {
+  width: 100%;
+  height: var(--dc-now-indicator-line-width, 2px);
+  background-color: var(--dc-now-indicator-color, #ef4444);
+}
+
+/* --- EXISTING CSS BELOW --- */
 
 .content {
   position: relative;
   width: 100%;
   height: 100%;
 }
-
-
 
 .calendar-wrapper {
   width: 100%;
@@ -1234,7 +1594,6 @@ export default defineComponent({
   overflow-x: auto;
   user-select: none;
   flex: 1;
-  /* Masking for fading effect on edges if desired */
   -webkit-mask-image: linear-gradient(to right,
       transparent 0,
       black 10px,
@@ -1256,7 +1615,6 @@ export default defineComponent({
   padding-bottom: 0.5rem;
   flex-shrink: 0;
   flex-grow: 1;
-  /* CHANGE: Enforce minimum width from variable */
   min-width: var(--dc-day-container-width);
 }
 
@@ -1301,7 +1659,6 @@ export default defineComponent({
   user-select: none;
   align-items: center;
   justify-content: space-around;
-  /* FIX 2: Removed min-width inheritance from day-cell */
 }
 
 [dir='ltr'] .hours-column {
@@ -1401,7 +1758,6 @@ export default defineComponent({
 .header-padding {
   flex-shrink: 0;
   height: 100%;
-  /* FIX 2: Removed min-width inheritance from day-cell */
 }
 
 .grid-line-v {
@@ -1436,7 +1792,7 @@ export default defineComponent({
   z-index: 1;
   user-select: none;
   box-sizing: border-box;
-  transition: box-shadow 0.2s ease, transform 0.2s ease, top 0.3s ease, left 0.3s ease;
+  transition: box-shadow 0.2s ease, transform 0.2s ease, top 0.3s ease, left 0.3s ease, width 0.3s ease, height 0.3s ease;
   cursor: grab;
 }
 
@@ -1451,7 +1807,6 @@ export default defineComponent({
 .calendar-item-wrapper.dragging {
   opacity: 0.5;
   cursor: grabbing;
-  /* width: 100%; */
   transition: none;
 }
 
@@ -1496,13 +1851,11 @@ export default defineComponent({
   position: relative;
 }
 
-/* NEW CLASS: This protects your layout */
 .item-content {
   width: 100%;
   height: 100%;
   padding: 0px;
   margin: 0px;
-  /* Ensure this wrapper doesn't add scrollbars */
   overflow: hidden;
 }
 
@@ -1518,17 +1871,11 @@ export default defineComponent({
   overflow: hidden;
 }
 
-/* DEEP SELECTOR: Forces user content to behave */
-/* This applies to the direct child element provided by the user */
 .item-content :deep(> *) {
   margin: 0 !important;
   padding: 0px !important;
-  /* Kill external margins that cause overflow */
   box-sizing: border-box !important;
-  /* Ensure borders/padding are included in height */
   height: 100%;
-  /* Fill the wrapper */
   width: 100%;
-  /* Fill the wrapper */
 }
 </style>

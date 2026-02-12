@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 import '@/assets/css/calendar.css'
 import CalendarGrid from './components/CalendarGrid.vue'
@@ -38,27 +38,27 @@ const gridItems = ref([
 
 const calendarGridOptions = {
   calendar: 'jalaali',
-  // calendar:georgian', 
-  mode: 'week',
+  mode: 'month',
   editable: true,
   zoom: true,
   lang: 'fa',
   dir: 'ltr',
   minTime: 30,
-  startHour: 8,
+  startHour: 5,
   endHour: 20,
   startDate: new Date(),
   // endDate: new Date(),
   holidays: [
-    // December 2025 Holidays
-    new Date('2025-12-17'), // Christmas Day
-    new Date('2025-12-10'), // New Year's Eve (Often treated as a half or full holiday in many places)
-
-    // January 2026 (for testing month boundary)
-    new Date('2026-01-01'), // New Year's Day
-    new Date('2026-01-02'), // Day after New Year's Day
-  ]
+    new Date('2025-12-17'),
+    new Date('2025-12-10'),
+    new Date('2026-01-01'),
+    new Date('2026-01-02'),
+  ],
+  autoCreateEvent: false,
 }
+watch(()=> gridItems.value,()=>{
+  console.log('items updated')
+},{deep:true,immediate:true})
 </script>
 
 <template>
